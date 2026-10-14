@@ -1,0 +1,40 @@
+# Sentaurus / TCAD run output
+*.tdr
+*.bnd
+*.plx
+*.log
+*.out
+*.err
+*.cmd.bak
+pp*_*
+n[0-9]*_*
+*_fps.tdr
+*_half*.tdr
+
+# Sentaurus Workbench project internals
+gvars.dat
+gtree.dat
+.project
+.status
+nodes/
+results/
+scratch/
+
+# Licence / host files — never commit these
+*.lic
+license.dat
+synopsys_*.log
+
+# Editor and OS cruft
+.vscode/
+.idea/
+*.swp
+*~
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Python scratch
+__pycache__/
+*.pyc
+.ipynb_checkpoints/

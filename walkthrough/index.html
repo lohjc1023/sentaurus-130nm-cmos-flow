@@ -1,0 +1,1988 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>130 nm CMOS Flow Walkthrough</title>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: fixed module rail | cross-section stage | command + rationale column.
+   Palette: litho-bay amber on cool indigo-leaning slate. */
+:root{
+  --bg:#edeff4; --surface:#ffffff; --surface-2:#e3e6ee; --surface-3:#d7dbe6;
+  --fg:#161923; --fg-dim:#575f71; --fg-faint:#7d8699;
+  --line:#ccd2e0; --line-soft:#dfe3ec;
+  --accent:#9a5704; --accent-bright:#c87a12; --accent-soft:#fbeed6;
+  --stage-bg:#e7eaf1; --stage-edge:#c3cad9;
+  --warn:#9c2d2d; --warn-soft:#fae3e1;
+  --ok:#1d5f49;
+
+  --m-si:#b6c0d1;      --m-si-s:#8794ab;
+  --m-ox:#cde6ef;      --m-ox-s:#86bbcb;
+  --m-nit:#bedbc8;     --m-nit-s:#7bab8f;
+  --m-pr:#f6dc96;      --m-pr-s:#c5a03c;
+  --m-poly:#ddb4ae;    --m-poly-s:#ae7c74;
+  --m-cosi:#9095b8;    --m-cosi-s:#5f6590;
+  --m-oxynit:#dccfea;  --m-oxynit-s:#a692c0;
+  --m-w:#7d8490;       --m-w-s:#4c525c;
+
+  --d-p:#b2341f;  --d-n:#1c5f93;
+
+  --ff-disp:'Archivo','Helvetica Neue',Arial,sans-serif;
+  --ff-body:'IBM Plex Sans','Segoe UI',system-ui,sans-serif;
+  --ff-mono:'IBM Plex Mono','SFMono-Regular',Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#101219; --surface:#191c24; --surface-2:#21252e; --surface-3:#2b3039;
+  --fg:#e7eaf1; --fg-dim:#98a0b2; --fg-faint:#767e91;
+  --line:#2e3340; --line-soft:#252a35;
+  --accent:#efa83d; --accent-bright:#f7bd62; --accent-soft:#39290f;
+  --stage-bg:#161a22; --stage-edge:#2c3240;
+  --warn:#e4786c; --warn-soft:#3a1d1a;
+  --ok:#6cc5a4;
+
+  --m-si:#3c4452;      --m-si-s:#5e6779;
+  --m-ox:#24434c;      --m-ox-s:#4a7b89;
+  --m-nit:#244131;     --m-nit-s:#4d7a5e;
+  --m-pr:#4b3a11;      --m-pr-s:#a07f27;
+  --m-poly:#4d3230;    --m-poly-s:#8d5d57;
+  --m-cosi:#474c6d;    --m-cosi-s:#7c83ae;
+  --m-oxynit:#382d49;  --m-oxynit-s:#6a5986;
+  --m-w:#5a616d;       --m-w-s:#8a919f;
+
+  --d-p:#f08a72;  --d-n:#73b4e4;
+  color-scheme:dark;
+}}
+:root[data-theme="dark"]{
+  --bg:#101219; --surface:#191c24; --surface-2:#21252e; --surface-3:#2b3039;
+  --fg:#e7eaf1; --fg-dim:#98a0b2; --fg-faint:#767e91;
+  --line:#2e3340; --line-soft:#252a35;
+  --accent:#efa83d; --accent-bright:#f7bd62; --accent-soft:#39290f;
+  --stage-bg:#161a22; --stage-edge:#2c3240;
+  --warn:#e4786c; --warn-soft:#3a1d1a;
+  --ok:#6cc5a4;
+  --m-si:#3c4452;      --m-si-s:#5e6779;
+  --m-ox:#24434c;      --m-ox-s:#4a7b89;
+  --m-nit:#244131;     --m-nit-s:#4d7a5e;
+  --m-pr:#4b3a11;      --m-pr-s:#a07f27;
+  --m-poly:#4d3230;    --m-poly-s:#8d5d57;
+  --m-cosi:#474c6d;    --m-cosi-s:#7c83ae;
+  --m-oxynit:#382d49;  --m-oxynit-s:#6a5986;
+  --m-w:#5a616d;       --m-w-s:#8a919f;
+  --d-p:#f08a72;  --d-n:#73b4e4;
+  color-scheme:dark;
+}
+
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--ff-body);
+  font-size:15px;line-height:1.55;-webkit-font-smoothing:antialiased}
+h1,h2,h3,h4{font-family:var(--ff-disp);font-weight:600;margin:0;text-wrap:balance;
+  letter-spacing:-0.012em}
+code,pre{font-family:var(--ff-mono)}
+button{font-family:inherit;font-size:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--accent-bright);outline-offset:2px;border-radius:3px}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+
+/* ---------------------------------------------------------------- shell */
+.app{display:flex;flex-direction:column;min-height:100%}
+
+.top{display:flex;align-items:center;gap:16px;flex-wrap:wrap;
+  padding:14px 20px;border-bottom:1px solid var(--line);background:var(--surface);
+  position:sticky;top:env(safe-area-inset-top,0px);z-index:20}
+.brand{display:flex;flex-direction:column;gap:1px;min-width:0}
+.brand h1{font-size:17px;line-height:1.2}
+.brand .sub{font-size:11.5px;color:var(--fg-faint);font-family:var(--ff-mono);
+  letter-spacing:0.02em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.top .spacer{flex:1 1 auto}
+.toolbar{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+
+.chip{display:inline-flex;align-items:center;gap:6px;padding:5px 10px;border-radius:999px;
+  border:1px solid var(--line);background:var(--surface-2);font-size:11.5px;
+  font-family:var(--ff-mono);color:var(--fg-dim);cursor:pointer;white-space:nowrap;
+  transition:background .12s,border-color .12s,color .12s}
+.chip:hover{border-color:var(--accent);color:var(--fg)}
+.chip[aria-pressed="true"]{background:var(--accent-soft);border-color:var(--accent);color:var(--accent)}
+.chip.static{cursor:default}
+.chip.static:hover{border-color:var(--line);color:var(--fg-dim)}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--accent);flex:none}
+
+.body{display:grid;grid-template-columns:216px minmax(0,1fr) minmax(0,400px);
+  gap:0;align-items:stretch;flex:1 1 auto}
+
+/* ------------------------------------------------------------ rail */
+.rail{border-right:1px solid var(--line);background:var(--surface);
+  padding:14px 0 28px;overflow-y:auto}
+.rail .hd{font-family:var(--ff-mono);font-size:10px;letter-spacing:0.12em;
+  text-transform:uppercase;color:var(--fg-faint);padding:0 16px 8px}
+.mod{display:grid;grid-template-columns:26px 1fr;gap:9px;width:100%;text-align:left;
+  padding:8px 14px;border:0;border-left:2px solid transparent;background:none;cursor:pointer;
+  transition:background .12s}
+.mod:hover{background:var(--surface-2)}
+.mod .num{font-family:var(--ff-mono);font-size:11px;color:var(--fg-faint);padding-top:2px;
+  font-variant-numeric:tabular-nums}
+.mod .nm{display:block;font-family:var(--ff-disp);font-weight:600;font-size:13px;line-height:1.25}
+.mod .ds{display:block;font-size:11px;color:var(--fg-faint);line-height:1.3;margin-top:1px}
+.mod[aria-current="true"]{background:var(--accent-soft);border-left-color:var(--accent)}
+.mod[aria-current="true"] .num,.mod[aria-current="true"] .nm{color:var(--accent)}
+.mod .bar{grid-column:2;height:3px;border-radius:2px;background:var(--surface-3);margin-top:6px;
+  overflow:hidden}
+.mod .bar i{display:block;height:100%;background:var(--accent);border-radius:2px;
+  transition:width .2s ease}
+
+/* ------------------------------------------------------------ stage */
+.stage{padding:18px 20px 24px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.stagehd{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+.stagehd .kicker{font-family:var(--ff-mono);font-size:10.5px;letter-spacing:0.1em;
+  text-transform:uppercase;color:var(--accent)}
+.stagehd h2{font-size:21px;line-height:1.2;flex:1 1 220px;min-width:0}
+.lines{font-family:var(--ff-mono);font-size:11px;color:var(--fg-faint);
+  border:1px solid var(--line);border-radius:4px;padding:2px 7px;white-space:nowrap}
+.what{color:var(--fg-dim);font-size:14px;max-width:68ch;margin:0}
+
+.figwrap{background:var(--stage-bg);border:1px solid var(--stage-edge);border-radius:8px;
+  padding:4px;position:relative;overflow:hidden}
+figure{margin:0}
+svg.xsec{display:block;width:100%;height:auto;max-width:100%;color:var(--fg)}
+figcaption{font-size:11.5px;color:var(--fg-faint);padding:7px 10px 3px;line-height:1.45}
+
+.legend{display:flex;flex-wrap:wrap;gap:5px 12px;padding:2px 2px 0}
+.lg{display:inline-flex;align-items:center;gap:6px;font-size:11px;color:var(--fg-dim);
+  font-family:var(--ff-mono)}
+.sw{width:13px;height:11px;border-radius:2px;border:1px solid;flex:none}
+
+/* navigation */
+.nav{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.nbtn{display:inline-flex;align-items:center;gap:7px;padding:9px 15px;border-radius:6px;
+  border:1px solid var(--line);background:var(--surface);cursor:pointer;font-weight:500;
+  font-size:13.5px;transition:border-color .12s,background .12s}
+.nbtn:hover:not(:disabled){border-color:var(--accent);background:var(--surface-2)}
+.nbtn:disabled{opacity:.42;cursor:default}
+.nbtn.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+:root[data-theme="dark"] .nbtn.primary,
+.nbtn.primary{color:#fff}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .nbtn.primary{color:#15180f}}
+:root[data-theme="dark"] .nbtn.primary{color:#15180f}
+.nbtn.primary:hover:not(:disabled){background:var(--accent-bright);border-color:var(--accent-bright)}
+.count{font-family:var(--ff-mono);font-size:12px;color:var(--fg-faint);
+  font-variant-numeric:tabular-nums;margin-left:auto}
+.track{height:4px;background:var(--surface-3);border-radius:2px;overflow:hidden}
+.track i{display:block;height:100%;background:var(--accent);transition:width .22s ease}
+.kbd{font-family:var(--ff-mono);font-size:10px;color:var(--fg-faint)}
+.kbd b{border:1px solid var(--line);border-bottom-width:2px;border-radius:3px;padding:0 4px;
+  font-weight:500;color:var(--fg-dim)}
+
+/* ------------------------------------------------------------ detail */
+.detail{border-left:1px solid var(--line);background:var(--surface);padding:18px 18px 40px;
+  display:flex;flex-direction:column;gap:16px;overflow-y:auto;min-width:0}
+.panel{display:flex;flex-direction:column;gap:9px;min-width:0}
+.panel>.hd{display:flex;align-items:center;gap:8px;font-family:var(--ff-mono);font-size:10px;
+  letter-spacing:0.12em;text-transform:uppercase;color:var(--fg-faint)}
+.panel>.hd::after{content:"";flex:1 1 auto;height:1px;background:var(--line-soft)}
+
+pre.cmd{margin:0;background:var(--surface-2);border:1px solid var(--line-soft);
+  border-radius:6px;border-left:2px solid var(--accent);padding:9px 11px;font-size:11.5px;
+  line-height:1.6;overflow-x:auto;white-space:pre-wrap;overflow-wrap:anywhere;color:var(--fg)}
+.res{display:flex;gap:7px;font-size:11.5px;color:var(--fg-dim);padding:0 2px;
+  font-family:var(--ff-mono);line-height:1.5}
+.res .ar{color:var(--accent);flex:none}
+.res b{color:var(--fg);font-weight:500}
+.cmdgrp{display:flex;flex-direction:column;gap:5px;min-width:0}
+
+.why{font-size:13.5px;color:var(--fg-dim);line-height:1.62}
+.why p{margin:0 0 9px}
+.why p:last-child{margin-bottom:0}
+.why strong{color:var(--fg);font-weight:600}
+.why code{font-size:11.5px;background:var(--surface-2);border-radius:3px;padding:1px 4px;
+  color:var(--fg)}
+.why ul{margin:0 0 9px;padding-left:18px}
+.why li{margin-bottom:4px}
+.why li b{color:var(--fg)}
+
+.card{border:1px solid var(--line);border-radius:7px;padding:10px 12px;background:var(--surface-2);
+  display:flex;flex-direction:column;gap:5px}
+.card .t{font-family:var(--ff-mono);font-size:10px;letter-spacing:0.1em;text-transform:uppercase;
+  color:var(--fg-faint)}
+.card .v{font-family:var(--ff-disp);font-weight:600;font-size:14px}
+.card .n{font-size:12px;color:var(--fg-dim);line-height:1.45}
+.card.block{border-color:var(--warn);background:var(--warn-soft)}
+.card.block .v{color:var(--warn)}
+
+.kv{display:grid;grid-template-columns:auto 1fr;gap:3px 12px;font-size:12px}
+.kv dt{font-family:var(--ff-mono);color:var(--fg-faint);font-size:11px}
+.kv dd{margin:0;font-family:var(--ff-mono);color:var(--fg);font-variant-numeric:tabular-nums}
+
+svg.ramp{display:block;width:100%;height:auto;color:var(--fg)}
+svg.xsec text,svg.ramp text{font-family:var(--ff-mono)}
+
+.foot{padding:16px 20px 30px;border-top:1px solid var(--line);font-size:11.5px;
+  color:var(--fg-faint);line-height:1.6}
+.foot b{color:var(--fg-dim);font-weight:500}
+
+/* ------------------------------------------------------------ responsive */
+@media (max-width:1180px){
+  .body{grid-template-columns:184px minmax(0,1fr)}
+  .detail{grid-column:1 / -1;border-left:0;border-top:1px solid var(--line)}
+}
+@media (max-width:760px){
+  body{font-size:14.5px}
+  .body{grid-template-columns:minmax(0,1fr)}
+  .rail{border-right:0;border-bottom:1px solid var(--line);display:flex;gap:6px;
+    overflow-x:auto;padding:10px 16px;scrollbar-width:thin}
+  .rail .hd{display:none}
+  .mod{width:auto;flex:none;grid-template-columns:auto;border-left:0;border-bottom:2px solid transparent;
+    border-radius:6px;padding:6px 10px;gap:1px}
+  .mod .ds,.mod .bar{display:none}
+  .mod .num{padding:0;font-size:9.5px}
+  .mod[aria-current="true"]{border-bottom-color:var(--accent)}
+  .stage{padding:14px 16px 18px}
+  .stagehd h2{font-size:18px}
+  .detail{padding:16px 16px 36px}
+  .count{margin-left:0}
+}
+</style>
+<div class="app">
+  <header class="top">
+    <div class="brand">
+      <h1>130 nm CMOS Process Flow</h1>
+      <div class="sub">sprocess_fps.cmd &middot; Sentaurus Process &middot; EE4623</div>
+    </div>
+    <div class="spacer"></div>
+    <div class="toolbar">
+      <span class="chip static" title="Workbench parameters assumed for this walkthrough"><span class="dot"></span>@Domain@ = NMOS &middot; @Lgate@ = 0.13</span>
+      <button class="chip" id="t-res" aria-pressed="true">resolved values</button>
+      <button class="chip" id="t-dope" aria-pressed="false">doping</button>
+      <button class="chip" id="t-mesh" aria-pressed="false">mesh boxes</button>
+    </div>
+  </header>
+
+  <div class="body">
+    <nav class="rail" id="rail" aria-label="Process modules"></nav>
+
+    <main class="stage">
+      <div class="stagehd">
+        <span class="kicker" id="kicker"></span>
+        <h2 id="title"></h2>
+        <span class="lines" id="lines"></span>
+      </div>
+      <p class="what" id="what"></p>
+
+      <div class="figwrap">
+        <figure>
+          <svg class="xsec" id="xsec" viewBox="0 0 760 560" role="img" aria-label="Cross-section of the wafer at this process step"></svg>
+          <figcaption id="cap"></figcaption>
+        </figure>
+      </div>
+      <div class="legend" id="legend"></div>
+
+      <div class="track"><i id="track"></i></div>
+      <div class="nav">
+        <button class="nbtn" id="prev">&larr;&nbsp; Previous</button>
+        <button class="nbtn primary" id="next">Next step &nbsp;&rarr;</button>
+        <span class="kbd"><b>&larr;</b> <b>&rarr;</b> to step</span>
+        <span class="count" id="count"></span>
+      </div>
+    </main>
+
+    <aside class="detail">
+      <div class="panel">
+        <div class="hd">Command executed</div>
+        <div id="cmds"></div>
+      </div>
+      <div id="extras"></div>
+      <div class="panel">
+        <div class="hd">What is happening, and why</div>
+        <div class="why" id="why"></div>
+      </div>
+    </aside>
+  </div>
+
+  <footer class="foot">
+    <b>Reading the drawing.</b> The cross-section is to scale in both directions
+    (1.2 &times; 0.85 &micro;m shown), except that films thinner than about 6 nm &mdash; the
+    1.5 nm gate oxide, the 2 nm screen oxide, the STI liner &mdash; are drawn thicker
+    so they stay visible. Real values are always given in the command panel.
+    <br><br>
+    <b>What this is and is not.</b> The geometry is reconstructed from the etch, deposition
+    and mask statements in the command file, not read back from a TDR file, so a real
+    level-set solution will differ in detail &mdash; particularly at corners, at the divot
+    and in the exact spacer profile. Doping regions are schematic, drawn to show where each
+    implant lands rather than to represent a computed concentration.
+    <br><br>
+    <b>Assumptions.</b> Workbench parameters are taken as @Domain@&nbsp;=&nbsp;NMOS,
+    @Lgate@&nbsp;=&nbsp;0.13&nbsp;&micro;m, with <code>fp&nbsp;=&nbsp;1.0</code>,
+    <code>FastMode&nbsp;=&nbsp;0</code> and <code>debug&nbsp;=&nbsp;0</code>, so every
+    <code>implant</code> and <code>diffuse</code> runs and the <code>WriteBND</code>
+    boundary dumps are skipped. The active-area width and contact placement are taken from
+    the design rules in the file (<code>IsoPitch&nbsp;0.345</code>,
+    <code>PolyPitch&nbsp;0.32</code>) since the layout file <code>CMOS130_lyt.mac</code>
+    was not available.
+  </footer>
+</div>
+<script>
+/* ===========================================================================
+   geom.js — parametric cross-section geometry for the 130 nm CMOS flow.
+
+   Coordinate system follows Sentaurus Process convention:
+     x = depth, positive downwards, x = 0 at the original silicon surface
+     y = lateral, y = 0 at the GATE CENTRELINE (the mirror plane)
+   All lengths in micrometres.
+
+   The simulated domain in sprocess_fps.cmd runs from the field/STI edge to
+   the gate centreline (Ymid). The final `tdx --mirr-tdr -Y` mirrors it about
+   that plane. We therefore define every profile on the LEFT half only
+   (y from -YV to 0) and mirror it, which makes the symmetry exact.
+   =========================================================================== */
+
+const P = {
+  YV: 0.60,          // view half-width
+  XTOP: -0.30,       // top of view (above wafer surface)
+  XBOT: 0.55,        // bottom of view
+  ACT: 0.345,        // active / STI boundary  (= IsoPitch)
+  GHW: 0.065,        // gate half-width = Lgate/2, Lgate = 0.13
+  TPOLY: 0.16,       // Tpoly
+  GOX: 0.0015,       // gox
+  PADOX: 0.01,       // deposit Oxide rate 1.0 time 0.01
+  NIT: 0.10,         // deposit Nitride rate 1.0 time 0.1
+  STI_D: 0.45,       // STI_depth
+  STI_TILT: 87.0,    // STI_tilt
+  DIVOT: 0.01,       // Divot
+  LSP: 0.035,        // Lsp  (nitride spacer)
+  SPOX: 0.042,       // 1.2 * Lsp (oxide spacer)
+  COSI: 0.020,       // CoSi_thick
+  METAL1: 0.15,      // Metal1
+  RECESS: 0.005,     // SiRecess
+  REOX: 0.005,       // PolyReox
+  NATOX: 0.002,      // Nat_oxide
+  XCUT: 0.50,        // Xbot — transform cut depth for the device structure
+};
+
+P.STI_SLOPE = P.STI_D / Math.tan((P.STI_TILT * Math.PI) / 180); // 0.0236
+P.STI_REC_1 = 0.009;   // STI oxide recess after the divot etch
+P.STI_REC_2 = 0.032;   // further recess after the anisotropic spacer etch
+
+// Minimum drawn thickness so that 1.5 nm films stay visible. Real values are
+// always quoted in the text; the drawing says where it exaggerates.
+const MINVIS = 0.0058;
+const vis = (t) => Math.max(t, MINVIS);
+
+/* ---------------------------------------------------------------- SVG frame */
+const SC = 560;           // SVG units per micrometre
+const OFFX = 52;          // SVG x of y = -YV
+const OFFY = 40;          // SVG y of x = XTOP
+const VBW = 760;
+const VBH = 560;
+
+const sx = (y) => OFFX + (y + P.YV) * SC;
+const sy = (x) => OFFY + (x - P.XTOP) * SC;
+
+/* ------------------------------------------------------------ small helpers */
+const clampY = (y) => Math.max(-P.YV, Math.min(P.YV, y));
+
+// Mirror a half-profile (y: -YV -> 0) into a full profile (y: -YV -> +YV).
+function fullProfile(half) {
+  const out = half.map((p) => [p[0], p[1]]);
+  for (let i = half.length - 2; i >= 0; i--) out.push([-half[i][0], half[i][1]]);
+  return out;
+}
+
+// Mirror a discrete polygon about y = 0.
+const mir = (pts) => pts.map((p) => [-p[0], p[1]]).reverse();
+
+/* Miter offset of an open polyline along its outward normal.
+   Traversal is left -> right with solid material BELOW the line, so for a
+   segment direction d = (dy, dx) the outward normal is n = (dx, -dy)/|d|. */
+function offsetProfile(pts, t) {
+  if (t <= 0) return pts.map((p) => [p[0], p[1]]);
+  const seg = [];
+  for (let i = 0; i < pts.length - 1; i++) {
+    const [y0, x0] = pts[i];
+    const [y1, x1] = pts[i + 1];
+    const dy = y1 - y0, dx = x1 - x0;
+    const L = Math.hypot(dy, dx);
+    if (L < 1e-9) continue;
+    const ny = (dx / L) * t, nx = (-dy / L) * t;
+    seg.push([[y0 + ny, x0 + nx], [y1 + ny, x1 + nx]]);
+  }
+  if (!seg.length) return pts.map((p) => [p[0], p[1]]);
+
+  const out = [seg[0][0]];
+  const limit = 1.9 * t;            // miter limit: beyond this, bevel the joint
+  for (let i = 0; i < seg.length - 1; i++) {
+    const a = seg[i], b = seg[i + 1];
+    const p = lineIntersect(a[0], a[1], b[0], b[1]);
+    const v = pts[i + 1];
+    if (p && Math.hypot(p[0] - v[0], p[1] - v[1]) <= limit) {
+      out.push(p);
+    } else {
+      out.push(a[1], b[0]);         // bevel join — avoids self-intersecting spikes
+    }
+  }
+  out.push(seg[seg.length - 1][1]);
+  return monotone(out);
+}
+
+/* Offsetting a profile by more than the width of a notch (the STI divot, the
+   gate foot) makes the offset curve fold back on itself. Every profile here is
+   built left to right, so dropping any point that moves backwards in y removes
+   exactly those loops and leaves the film bridging the notch, which is what a
+   conformal deposition actually does. */
+function monotone(pts) {
+  const out = [];
+  for (const p of pts) {
+    while (out.length && p[0] < out[out.length - 1][0] - 1e-9) out.pop();
+    out.push(p);
+  }
+  return out;
+}
+
+function lineIntersect(p1, p2, p3, p4) {
+  const d1y = p2[0] - p1[0], d1x = p2[1] - p1[1];
+  const d2y = p4[0] - p3[0], d2x = p4[1] - p3[1];
+  const den = d1y * d2x - d1x * d2y;
+  if (Math.abs(den) < 1e-12) return null;
+  const t = ((p3[0] - p1[0]) * d2x - (p3[1] - p1[1]) * d2y) / den;
+  return [p1[0] + t * d1y, p1[1] + t * d1x];
+}
+
+/* The monotone sweep runs left to right, so applying it to a full profile
+   would clean the two halves differently and break the mirror symmetry the
+   device actually has. Offset the half instead, then mirror the result. */
+function symOffset(prof, t) {
+  const half = prof.filter((p) => p[0] <= 1e-9);
+  if (half.length < 2) return offsetProfile(prof, t);
+  const off = fillNarrowDips(offsetProfile(half, t), t);
+  off[off.length - 1] = [0, off[off.length - 1][1]];   // pin the centre point
+  return fullProfile(off);
+}
+
+/* A film thicker than a notch is wide simply bridges it: 160 nm of poly does
+   not reproduce the 10 nm divot. Drop local dips narrower than the film. */
+function fillNarrowDips(pts, t) {
+  const p = pts.slice();
+  for (let guard = 0; guard < 60; guard++) {
+    let hit = -1;
+    for (let i = 1; i < p.length - 1; i++) {
+      const a = p[i - 1], b = p[i], c = p[i + 1];
+      if (b[1] > a[1] + 1e-9 && b[1] > c[1] + 1e-9 && Math.abs(c[0] - a[0]) < 1.6 * t) {
+        hit = i; break;
+      }
+    }
+    if (hit < 0) break;
+    p.splice(hit, 1);
+  }
+  return p;
+}
+
+// Closed band between a profile and that profile offset outwards by t.
+function band(prof, t) {
+  return prof.concat(symOffset(prof, t).slice().reverse());
+}
+
+// Solid below a profile, closed down to depth xb.
+function solidBelow(prof, xb) {
+  const last = prof[prof.length - 1][0];
+  const first = prof[0][0];
+  return prof.concat([[last, xb], [first, xb]]);
+}
+
+/* ======================================================= silicon topography */
+/* The single-crystal silicon surface.
+     stiRec      – (unused for Si; the trench is cut in silicon)
+     sdRecess    – recess of the exposed S/D silicon
+     innerEdge   – |y| inside which the silicon is protected (gate / spacer)
+     trench      – trench depth, 0 before the STI etch
+*/
+function siProfile(o) {
+  const t = o.trench ?? 0;
+  const r = o.sdRecess ?? 0;
+  const ie = o.innerEdge ?? 0;          // protected zone |y| < ie stays at x = 0
+  const round = o.round ? 0.012 : 0;
+
+  const pts = [];
+  if (t > 0) {
+    const slope = (t / P.STI_D) * P.STI_SLOPE;
+    pts.push([-P.YV, t]);
+    pts.push([-(P.ACT + slope) - (round ? 0 : 0), t]);
+    if (round) {
+      // rounded trench bottom corner and rounded top corner
+      pts.push([-(P.ACT + slope) + round * 0.5, t - round * 0.35]);
+      pts.push([-P.ACT - round * 0.35, r + round * 0.5]);
+      pts.push([-P.ACT + round * 0.2, r]);
+    } else {
+      pts.push([-P.ACT, r]);
+    }
+  } else {
+    pts.push([-P.YV, r]);
+  }
+  if (ie > 0 && r > 0) {
+    pts.push([-(ie + r), r]);           // 45 degree ramp back up under the gate
+    pts.push([-ie, 0]);
+    pts.push([0, 0]);
+  } else {
+    pts.push([0, r]);
+  }
+  return pts;
+}
+
+/* ------------------------------------------- composite exposed top surface */
+/* Films deposit on whatever is exposed: silicon over the active area and
+   STI oxide over the field. This returns that composite profile. */
+function topSurface(o) {
+  const si = siProfile(o);
+  const rec = o.stiRec;                 // oxide top below the Si surface
+  if (rec == null) return fullProfile(si);
+
+  // Field is filled with oxide, recessed by `rec`; divot at the Si edge.
+  const r = o.sdRecess ?? 0;
+  const half = [
+    [-P.YV, rec],
+    [-P.ACT - 0.030, rec],
+    [-P.ACT - 0.013, rec + P.DIVOT * 0.9],
+    [-P.ACT - 0.003, r + 0.004],
+    [-P.ACT, r],
+  ];
+  const ie = o.innerEdge ?? 0;
+  if (ie > 0 && r > 0) {
+    half.push([-(ie + r), r], [-ie, 0], [0, 0]);
+  } else {
+    half.push([0, r]);
+  }
+  return fullProfile(half);
+}
+
+/* A flat surface at depth x across the whole width. */
+const flat = (x) => [[-P.YV, x], [0, x], [P.YV, x]];
+
+/* ====================================================== gate stack geometry */
+function gateStack(o) {
+  const shapes = [];
+  const goxT = vis(P.GOX);
+  const top = -(P.TPOLY + goxT);
+  const hw = o.smooth ? P.GHW - 0.001 : P.GHW;
+  const rr = o.smooth ? 0.012 : 0;      // corner rounding after the 5 nm etch/depo
+
+  if (rr) {
+    shapes.push({
+      mat: 'poly',
+      pts: [
+        [-hw, -goxT], [-hw, top + rr], [-hw + rr, top],
+        [hw - rr, top], [hw, top + rr], [hw, -goxT],
+      ],
+    });
+  } else {
+    shapes.push({ mat: 'poly', pts: [[-hw, -goxT], [-hw, top], [hw, top], [hw, -goxT]] });
+  }
+  return shapes;
+}
+
+/* ============================================================ spacer shapes */
+function spacerShapes() {
+  const goxT = vis(P.GOX);
+  const polyTop = -(P.TPOLY + goxT);
+  const base = P.RECESS;                // S/D surface is recessed 5 nm
+  const y0 = P.GHW + P.REOX;            // outside the reox on the gate sidewall
+  const y1 = y0 + P.LSP;
+  const y2 = y1 + P.SPOX;
+  const nit = [
+    [y0, polyTop - P.REOX], [y1, polyTop + 0.040],
+    [y1, base], [y0, base],
+  ];
+  const ox = [
+    [y1, polyTop + 0.040], [y2, polyTop + 0.098],
+    [y2, base], [y1, base],
+  ];
+  return [
+    { mat: 'nit', pts: nit }, { mat: 'nit', pts: mir(nit) },
+    { mat: 'ox', pts: ox }, { mat: 'ox', pts: mir(ox) },
+  ];
+}
+
+/* ================================================================ via shape */
+const VIA_C = 0.235;        // contact centre
+const VIA_HW = 0.065;       // half-width at the bottom
+function viaHole(depthTop, depthBot) {
+  // trapezoidal, 82 degrees => wider at the top
+  const lat = (depthBot - depthTop) / Math.tan((82 * Math.PI) / 180);
+  const tw = VIA_HW + lat;
+  const p = [
+    [VIA_C - tw, depthTop], [VIA_C + tw, depthTop],
+    [VIA_C + VIA_HW, depthBot], [VIA_C - VIA_HW, depthBot],
+  ];
+  return [p, mir(p)];
+}
+
+/* =========================================================================
+   Geometry states. Each returns an ordered back-to-front shape list.
+   ========================================================================= */
+const STATES = {};
+
+const SUB = (prof) => ({ mat: 'si', pts: solidBelow(prof, P.XBOT) });
+
+/* --- substrate --------------------------------------------------------- */
+STATES.bare = () => [SUB(flat(0))];
+
+/* --- pad oxide + nitride hard mask ------------------------------------ */
+STATES.pad = () => {
+  const s = flat(0);
+  return [
+    SUB(s),
+    { mat: 'ox', pts: band(s, P.PADOX) },
+    { mat: 'nit', pts: band(offsetProfile(s, P.PADOX), P.NIT) },
+  ];
+};
+
+/* --- Active_n resist over the active area ----------------------------- */
+STATES.actResist = () => {
+  const top = -(P.PADOX + P.NIT);
+  return STATES.pad().concat([
+    { mat: 'pr', pts: [[-P.ACT, top], [-P.ACT, top - 0.2], [P.ACT, top - 0.2], [P.ACT, top]] },
+  ]);
+};
+
+/* --- nitride cleared in the field (resist still present) -------------- */
+STATES.nitEtch = () => {
+  const s = flat(0);
+  const top = -(P.PADOX + P.NIT);
+  const nitPts = [[-P.ACT, -P.PADOX], [-P.ACT, top], [P.ACT, top], [P.ACT, -P.PADOX]];
+  return [
+    SUB(s),
+    { mat: 'ox', pts: band(s, P.PADOX) },
+    { mat: 'nit', pts: nitPts },
+    { mat: 'pr', pts: [[-P.ACT, top], [-P.ACT, top - 0.2], [P.ACT, top - 0.2], [P.ACT, top]] },
+  ];
+};
+
+STATES.nitEtchNoPR = () => STATES.nitEtch().slice(0, 3);
+
+/* --- pad oxide cleared in the field ----------------------------------- */
+STATES.padEtch = () => {
+  const s = flat(0);
+  const top = -(P.PADOX + P.NIT);
+  return [
+    SUB(s),
+    { mat: 'ox', pts: [[-P.ACT, 0], [-P.ACT, -P.PADOX], [P.ACT, -P.PADOX], [P.ACT, 0]] },
+    { mat: 'nit', pts: [[-P.ACT, -P.PADOX], [-P.ACT, top], [P.ACT, top], [P.ACT, -P.PADOX]] },
+  ];
+};
+
+/* --- STI trench etched ------------------------------------------------ */
+function trenchHM(extra) {
+  const prof = topSurface({ trench: P.STI_D });
+  const top = -(P.PADOX + P.NIT);
+  const out = [
+    SUB(prof),
+    { mat: 'ox', pts: [[-P.ACT, 0], [-P.ACT, -P.PADOX], [P.ACT, -P.PADOX], [P.ACT, 0]] },
+    { mat: 'nit', pts: [[-P.ACT, -P.PADOX], [-P.ACT, top], [P.ACT, top], [P.ACT, -P.PADOX]] },
+  ];
+  if (extra === 'liner') {
+    // thermal liner on the exposed trench walls only
+    const lf = fullProfile(siProfile({ trench: P.STI_D }));
+    const lin = band(lf, vis(0.006));
+    out.splice(1, 0, { mat: 'ox', pts: lin, clip: 'field' });
+  }
+  return out;
+}
+STATES.trench = () => trenchHM();
+STATES.liner = () => trenchHM('liner');
+
+/* --- hard mask stripped ------------------------------------------------ */
+STATES.stripHM = () => [SUB(topSurface({ trench: P.STI_D }))];
+STATES.cornerRound = () => [SUB(topSurface({ trench: P.STI_D, round: true }))];
+
+/* --- trench filled with oxide to x = -0.002 --------------------------- */
+STATES.oxFill = () => {
+  const si = topSurface({ trench: P.STI_D, round: true });
+  return [
+    SUB(si),
+    { mat: 'ox', pts: si.concat([[P.YV, -vis(0.002)], [-P.YV, -vis(0.002)]]) },
+  ];
+};
+
+/* --- blanket resist on the filled wafer ------------------------------- */
+STATES.wellBlock = () => STATES.oxFill().concat([
+  { mat: 'pr', pts: [[-P.YV, -vis(0.002)], [-P.YV, -1.0], [P.YV, -1.0], [P.YV, -vis(0.002)]] },
+]);
+
+/* --- after the divot etch --------------------------------------------- */
+function divotBase() {
+  const si = topSurface({ trench: P.STI_D, round: true });
+  const srf = topSurface({ trench: P.STI_D, round: true, stiRec: P.STI_REC_1 });
+  return [SUB(si), { mat: 'ox', pts: si.concat(srf.slice().reverse()), key: 'sti' }];
+}
+STATES.divot = () => divotBase();
+
+/* --- gate oxide -------------------------------------------------------- */
+function goxBase(o = {}) {
+  const out = divotBase();
+  const srf = topSurface({ trench: P.STI_D, round: true, stiRec: P.STI_REC_1 });
+  out.push({ mat: 'ox', pts: band(srf, vis(P.GOX)), key: 'gox' });
+  return out;
+}
+STATES.gox = () => goxBase();
+
+/* --- poly blanket ------------------------------------------------------ */
+STATES.polyDep = () => {
+  const out = goxBase();
+  const srf = symOffset(
+    topSurface({ trench: P.STI_D, round: true, stiRec: P.STI_REC_1 }), vis(P.GOX));
+  out.push({ mat: 'poly', pts: band(srf, P.TPOLY) });
+  return out;
+};
+
+STATES.polyResist = () => {
+  const out = STATES.polyDep();
+  const top = -(P.TPOLY + vis(P.GOX));
+  out.push({ mat: 'pr', pts: [[-P.GHW, top], [-P.GHW, top - 0.2], [P.GHW, top - 0.2], [P.GHW, top]] });
+  return out;
+};
+
+STATES.polyEtch = () => {
+  const out = goxBase().concat(gateStack({}));
+  const top = -(P.TPOLY + vis(P.GOX));
+  out.push({ mat: 'pr', pts: [[-P.GHW, top], [-P.GHW, top - 0.2], [P.GHW, top - 0.2], [P.GHW, top]] });
+  return out;
+};
+
+STATES.gateStack = () => goxBase().concat(gateStack({}));
+STATES.gateSmooth = () => goxBase().concat(gateStack({ smooth: true }));
+
+/* --- gate oxide removed from the S/D, silicon recessed 5 nm ----------- */
+function recessBase() {
+  const o = { trench: P.STI_D, round: true, sdRecess: P.RECESS, innerEdge: P.GHW };
+  const si = topSurface(o);
+  const srf = topSurface({ ...o, stiRec: P.STI_REC_1 + P.RECESS });
+  const out = [
+    SUB(si),
+    { mat: 'ox', pts: si.concat(srf.slice().reverse()), key: 'sti' },
+  ];
+  // gate oxide survives only under the gate
+  const goxT = vis(P.GOX);
+  out.push({ mat: 'ox', pts: [[-P.GHW, 0], [-P.GHW, -goxT], [P.GHW, -goxT], [P.GHW, 0]], key: 'gox' });
+  return out;
+}
+STATES.sdRecess = () => recessBase().concat(gateStack({ smooth: true }));
+
+/* --- conformal films over the gate ------------------------------------ */
+function conformalOverGate(layers) {
+  /* Build the exposed outline of (recessed wafer + gate stack) as a single
+     left-to-right profile, then offset it for each conformal film. */
+  const o = { trench: P.STI_D, round: true, sdRecess: P.RECESS, innerEdge: P.GHW };
+  const srf = topSurface({ ...o, stiRec: P.STI_REC_1 + P.RECESS });
+  const goxT = vis(P.GOX);
+  const top = -(P.TPOLY + goxT);
+
+  // outline: field -> up the left gate sidewall -> across the poly top -> down
+  const half = [];
+  for (const p of srf) { if (p[0] <= -P.GHW + 1e-9) half.push(p); }
+  half.push([-P.GHW, 0], [-P.GHW, top], [0, top]);
+  const outline = fullProfile(half);
+
+  const out = recessBase().concat(gateStack({ smooth: true }));
+  let cur = outline;
+  for (const L of layers) {
+    out.push({ mat: L.mat, pts: band(cur, L.t), key: L.key });
+    cur = symOffset(cur, L.t);
+  }
+  return out;
+}
+
+STATES.reox = () => conformalOverGate([{ mat: 'ox', t: P.REOX, key: 'reox' }]);
+STATES.nitSpacer = () => conformalOverGate([
+  { mat: 'ox', t: P.REOX, key: 'reox' }, { mat: 'nit', t: P.LSP },
+]);
+STATES.oxSpacer = () => conformalOverGate([
+  { mat: 'ox', t: P.REOX, key: 'reox' }, { mat: 'nit', t: P.LSP }, { mat: 'ox', t: P.SPOX },
+]);
+
+/* --- spacers formed ---------------------------------------------------- */
+function spacerBase(o = {}) {
+  const g = { trench: P.STI_D, round: true, sdRecess: P.RECESS + (o.extraSi || 0), innerEdge: P.GHW + P.REOX + P.LSP + P.SPOX };
+  const si = topSurface(g);
+  const srf = topSurface({ ...g, stiRec: P.STI_REC_2 + P.RECESS });
+  const out = [
+    SUB(si),
+    { mat: 'ox', pts: si.concat(srf.slice().reverse()), key: 'sti' },
+  ];
+  const goxT = vis(P.GOX);
+  out.push({ mat: 'ox', pts: [[-P.GHW, 0], [-P.GHW, -goxT], [P.GHW, -goxT], [P.GHW, 0]], key: 'gox' });
+  // reox skin on the gate sidewalls + top
+  const top = -(P.TPOLY + goxT);
+  const sk = [
+    [-P.GHW - P.REOX, 0], [-P.GHW - P.REOX, top - P.REOX],
+    [P.GHW + P.REOX, top - P.REOX], [P.GHW + P.REOX, 0],
+    [P.GHW, 0], [P.GHW, top], [-P.GHW, top], [-P.GHW, 0],
+  ];
+  out.push({ mat: 'ox', pts: sk, key: 'reox' });
+  out.push(...gateStack({ smooth: true }));
+  out.push(...spacerShapes());
+  return out;
+}
+STATES.spacerEtch = () => spacerBase();
+
+STATES.natOx = () => {
+  const out = spacerBase();
+  const g = { trench: P.STI_D, round: true, sdRecess: P.RECESS, innerEdge: P.GHW + P.REOX + P.LSP + P.SPOX };
+  const srf = topSurface({ ...g, stiRec: P.STI_REC_2 + P.RECESS });
+  out.push({ mat: 'ox', pts: band(srf, vis(P.NATOX)), key: 'natox' });
+  return out;
+};
+
+STATES.silClean = () => spacerBase();
+STATES.siConsume = () => spacerBase({ extraSi: 0.008 });
+
+/* --- blanket resist states (the complementary-mask implant steps) ------ */
+const blanketPR = (x0) => ({
+  mat: 'pr', pts: [[-P.YV, x0], [-P.YV, x0 - 0.5], [P.YV, x0 - 0.5], [P.YV, x0]],
+});
+STATES.haloBlock = () => STATES.reox().concat([blanketPR(-(P.TPOLY + vis(P.GOX)) - P.REOX)]);
+STATES.hddBlock = () => STATES.natOx().concat([blanketPR(-(P.TPOLY + vis(P.GOX)) - P.REOX)]);
+
+/* --- cobalt silicide on the exposed single-crystal silicon only -------- */
+function cosiBase() {
+  const out = spacerBase({ extraSi: 0.008 });
+  const r = P.RECESS + 0.008;
+  const inner = P.GHW + P.REOX + P.LSP + P.SPOX;
+  const sl = (r / P.STI_D) * P.STI_SLOPE;
+  const half = [
+    [-P.ACT, r], [-(inner + r), r], [-inner, 0],
+  ];
+  // silicide only between the spacer foot and the STI edge
+  const seg = [[-P.ACT, r], [-inner - r, r]];
+  const sil = seg.concat(offsetProfile(seg, P.COSI).slice().reverse());
+  out.push({ mat: 'cosi', pts: sil, key: 'cosi' });
+  out.push({ mat: 'cosi', pts: mir(sil), key: 'cosi' });
+  return out;
+}
+STATES.cosi = () => cosiBase();
+
+/* --- oxynitride liner + ILD fill -------------------------------------- */
+const ILD_TOP = -(P.METAL1 + 0.1);        // -0.25
+function ildBase() {
+  const out = cosiBase();
+  out.push({ mat: 'oxynit', pts: [[-P.YV, ILD_TOP + 0.05], [-P.YV, ILD_TOP + 0.0], [P.YV, ILD_TOP], [P.YV, ILD_TOP + 0.05]], key: 'onlin' });
+  out.push({ mat: 'ox', pts: [[-P.YV, ILD_TOP], [-P.YV, ILD_TOP], [P.YV, ILD_TOP], [P.YV, ILD_TOP]], key: 'nil' });
+  return out;
+}
+/* The ILD is drawn as a single block above the structure: everything already
+   placed is painted first, then the ILD covers it, so we re-draw the stack
+   underneath and let the ILD block sit on top with the liner outlined. */
+STATES.ildDep = () => {
+  const out = cosiBase();
+  const g = { trench: P.STI_D, round: true, sdRecess: P.RECESS + 0.008, innerEdge: P.GHW + P.REOX + P.LSP + P.SPOX };
+  const srf = topSurface({ ...g, stiRec: P.STI_REC_2 + P.RECESS });
+  const goxT = vis(P.GOX);
+  const top = -(P.TPOLY + goxT) - P.REOX;
+  const half = [];
+  for (const p of srf) if (p[0] <= -(P.GHW + P.REOX + P.LSP + P.SPOX) + 1e-9) half.push(p);
+  half.push([-(P.GHW + P.REOX + P.LSP + P.SPOX), 0]);
+  half.push([-(P.GHW + P.REOX + 0.001), top + 0.04]);
+  half.push([-P.GHW - P.REOX, top], [0, top]);
+  const outline = fullProfile(half);
+  out.push({ mat: 'oxynit', pts: band(outline, 0.05), key: 'onlin' });
+  const lin = symOffset(outline, 0.05);
+  out.push({ mat: 'ox', pts: lin.concat([[P.YV, ILD_TOP], [-P.YV, ILD_TOP]]), key: 'ild' });
+  return out;
+};
+
+/* --- VIA lithography and etch ----------------------------------------- */
+STATES.viaResist = () => {
+  const out = STATES.ildDep();
+  const t = ILD_TOP, tt = ILD_TOP - 0.5;
+  const [a] = viaHole(t, t);
+  const w = VIA_HW + (0.2475 / Math.tan((82 * Math.PI) / 180));
+  out.push({ mat: 'pr', pts: [[-P.YV, t], [-P.YV, tt], [VIA_C - w, tt], [VIA_C - w, t]] });
+  out.push({ mat: 'pr', pts: [[VIA_C + w, t], [VIA_C + w, tt], [-VIA_C + w, tt], [-VIA_C + w, t]] });
+  out.push({ mat: 'pr', pts: [[-VIA_C - w, t], [-VIA_C - w, tt], [-P.YV, tt], [-P.YV, t]] });
+  return out;
+};
+
+function viaEtched(stopAtLiner, withResist) {
+  const out = STATES.ildDep();
+  const botOx = -(P.RECESS + 0.008) - 0.0 - 0.05 + 0.05;  // placeholder, set below
+  const siTop = P.RECESS + 0.008 - P.COSI;                // top of the CoSi2
+  const stop = stopAtLiner ? siTop - 0.05 : siTop;
+  const [h1, h2] = viaHole(ILD_TOP, stop);
+  out.push({ mat: 'void', pts: h1 });
+  out.push({ mat: 'void', pts: h2 });
+  if (withResist) {
+    const t = ILD_TOP, tt = ILD_TOP - 0.5;
+    const w = VIA_HW + (0.2475 / Math.tan((82 * Math.PI) / 180));
+    out.push({ mat: 'pr', pts: [[-P.YV, t], [-P.YV, tt], [VIA_C - w, tt], [VIA_C - w, t]] });
+    out.push({ mat: 'pr', pts: [[VIA_C + w, t], [VIA_C + w, tt], [-VIA_C + w, tt], [-VIA_C + w, t]] });
+    out.push({ mat: 'pr', pts: [[-VIA_C - w, t], [-VIA_C - w, tt], [-P.YV, tt], [-P.YV, t]] });
+  }
+  return out;
+}
+STATES.viaEtchOx = () => viaEtched(true, true);
+STATES.viaEtchON = () => viaEtched(false, true);
+STATES.viaStrip = () => viaEtched(false, false);
+
+STATES.wFill = () => {
+  const out = STATES.ildDep();
+  const siTop = P.RECESS + 0.008 - P.COSI;
+  const [h1, h2] = viaHole(ILD_TOP, siTop);
+  out.push({ mat: 'w', pts: h1, key: 'plug' });
+  out.push({ mat: 'w', pts: h2, key: 'plug' });
+  return out;
+};
+
+/* --- device structure: truncated, dielectrics stripped ---------------- */
+function deviceBase() {
+  const g = { trench: P.STI_D, round: true, sdRecess: P.RECESS + 0.008, innerEdge: P.GHW + P.REOX + P.LSP + P.SPOX };
+  const si = topSurface(g);
+  const out = [{ mat: 'si', pts: solidBelow(si, P.XCUT) }];
+  const goxT = vis(P.GOX);
+  out.push({ mat: 'ox', pts: [[-P.GHW, 0], [-P.GHW, -goxT], [P.GHW, -goxT], [P.GHW, 0]], key: 'gox' });
+  out.push(...gateStack({ smooth: true }));
+  // spacer nitride survives `strip Oxide`
+  const polyTop = -(P.TPOLY + goxT);
+  const y0 = P.GHW + P.REOX, y1 = y0 + P.LSP;
+  const nit = [[y0, polyTop - P.REOX], [y1, polyTop + 0.040], [y1, P.RECESS], [y0, P.RECESS]];
+  out.push({ mat: 'nit', pts: nit }, { mat: 'nit', pts: mir(nit) });
+  // silicide stays
+  const r = P.RECESS + 0.008;
+  const inner = P.GHW + P.REOX + P.LSP + P.SPOX;
+  const seg = [[-P.ACT, r], [-inner - r, r]];
+  const sil = seg.concat(offsetProfile(seg, P.COSI).slice().reverse());
+  out.push({ mat: 'cosi', pts: sil, key: 'cosi' }, { mat: 'cosi', pts: mir(sil), key: 'cosi' });
+  return out;
+}
+STATES.deviceStrip = () => deviceBase();
+STATES.deviceFinal = () => deviceBase();
+
+/* =========================================================================
+   Doping overlay regions, revealed cumulatively.
+   ========================================================================= */
+const DOPING = {
+  pwell: () => {
+    const g = { trench: P.STI_D, round: true };
+    const si = topSurface(g);
+    return [{ key: 'pwell', pts: si.concat([[P.YV, 0.42], [-P.YV, 0.42]]) }];
+  },
+  halo: () => {
+    const y = P.GHW + 0.055;
+    const p = [[-y, 0.004], [y, 0.004], [y, 0.075], [-y, 0.075]];
+    return [{ key: 'halo', pts: p }];
+  },
+  next: () => {
+    const a = [[-P.ACT, 0.004], [-P.GHW + 0.012, 0.004], [-P.GHW + 0.012, 0.030], [-P.ACT, 0.030]];
+    return [{ key: 'next', pts: a }, { key: 'next', pts: mir(a) }];
+  },
+  nplus: () => {
+    const y0 = P.GHW + P.REOX + P.LSP + P.SPOX - 0.012;
+    const a = [[-P.ACT, 0.004], [-y0, 0.004], [-y0, 0.105], [-P.ACT, 0.105]];
+    return [{ key: 'nplus', pts: a }, { key: 'nplus', pts: mir(a) }];
+  },
+  polyn: () => {
+    const goxT = vis(P.GOX);
+    const top = -(P.TPOLY + goxT);
+    return [{ key: 'polyn', pts: [[-P.GHW + 0.002, -goxT], [-P.GHW + 0.002, top + 0.004], [P.GHW - 0.002, top + 0.004], [P.GHW - 0.002, -goxT]] }];
+  },
+};
+
+/* =========================================================================
+   Path generation
+   ========================================================================= */
+function toPath(pts) {
+  let d = '';
+  for (let i = 0; i < pts.length; i++) {
+    const X = sx(clampY(pts[i][0])).toFixed(2);
+    const Y = sy(pts[i][1]).toFixed(2);
+    d += (i === 0 ? 'M' : 'L') + X + ' ' + Y + ' ';
+  }
+  return d + 'Z';
+}
+/* ===========================================================================
+   steps.js — the flow of sprocess_fps.cmd, grouped into readable operations.
+
+   Assumed Workbench parameters:  @Domain@ = NMOS,  @Lgate@ = 0.13 um,
+   fp = 1.0, FastMode = 0, debug = 0.
+   `cmd` entries are verbatim from the file; `r` is the resolved value.
+   =========================================================================== */
+
+const MODULES = [
+  { id: 'setup',  n: '00', name: 'Setup & substrate', sub: 'Layout, parameters, starting wafer' },
+  { id: 'sti',    n: '01', name: 'STI isolation',     sub: 'Shallow trench, liner, oxide fill' },
+  { id: 'well',   n: '02', name: 'Well & Vᴛ',    sub: 'Retrograde well, threshold adjust' },
+  { id: 'gox',    n: '03', name: 'Gate oxide',        sub: '1.5 nm gate dielectric' },
+  { id: 'poly',   n: '04', name: 'Poly gate',         sub: 'Deposition and gate patterning' },
+  { id: 'reox',   n: '05', name: 'Recess & re-ox',    sub: 'Si recess, poly re-oxidation' },
+  { id: 'ext',    n: '06', name: 'Halo & extension',  sub: 'Pocket implants, LDD' },
+  { id: 'sd',     n: '07', name: 'Spacer & S/D',      sub: 'Sidewall spacer, HDD, activation' },
+  { id: 'sil',    n: '08', name: 'Silicidation',      sub: 'Self-aligned CoSi₂' },
+  { id: 'cont',   n: '09', name: 'Contact & metal',   sub: 'ILD, via etch, tungsten plug' },
+  { id: 'dev',    n: '10', name: 'Device structure',  sub: 'Re-mesh, contacts, mirror' },
+];
+
+/* thermal cycles decoded from the temp_ramp statements (minutes, degC) */
+const RAMPS = {
+  liner:    [[0, 600], [5, 800], [15, 800], [20, 600]],
+  well:     [[0, 600], [0.03, 1050], [0.363, 1050], [0.446, 600]],
+  gateox:   [[0, 600], [24, 740], [44, 740], [44.09, 600]],
+  polyreox: [[0, 600], [0.067, 800], [0.133, 900], [0.217, 900], [0.283, 800], [0.35, 600]],
+  spike:    [[0, 1000], [0.025, 1000]],
+};
+
+const STEPS = [
+/* ======================================================= 00 SETUP ======= */
+{
+  m: 'setup', t: 'Load the mask layout and pick the domain', lines: '11–37', geom: 'bare',
+  tag: 'setup',
+  cmd: [
+    { c: 'icwb filename= "CMOS130_lyt.mac" scale= 1e-3', r: 'layout file; coordinates in nm → µm' },
+    { c: 'icwb domain= "@Domain@"', r: '@Domain@ = NMOS' },
+    { c: 'icwb stretch name= "${Type}_L" value= @<(Lgate-0.060)>@', r: '0.130 − 0.060 = 0.070 µm of stretch' },
+    { c: 'fset Ymid [expr ($Ymax-$Ymin)/2.0]', r: 'the gate centreline — the mirror plane' },
+  ],
+  what: 'The whole simulation is driven by a real mask layout rather than hard-coded coordinates.',
+  why: '<p><code>icwb</code> (IC WorkBench) reads the GDS-style layout <code>CMOS130_lyt.mac</code> and slices out one named device from it. Every later <code>photo mask=…</code> and <code>refinebox mask=…</code> statement refers back to a layer in that file, so the same script builds the NMOS or the PMOS simply by changing <code>@Domain@</code>.</p><p>The <strong>stretch mark</strong> is the trick that makes gate length a sweepable parameter: the layout is drawn with a 0.060 µm gate and the named stretch inserts the remaining 0.070 µm, so <code>@Lgate@</code> can be swept in Workbench without redrawing masks.</p><p><code>Ymid</code> is the key to reading this whole script: the simulated domain runs from the field edge to the <strong>centre of the gate</strong>. Only half the transistor is simulated, and the last command mirrors it.</p>',
+},
+{
+  m: 'setup', t: 'Design rules and process parameters', lines: '44–78', geom: 'bare', tag: 'setup',
+  cmd: [
+    { c: 'fset PolyPitch 0.32   ;  fset Tpoly 0.16   ;  fset IsoPitch 0.345', r: 'layout pitches and poly thickness' },
+    { c: 'fset gox 0.0015  ;  fset Lsp 0.035  ;  fset SiRecess 0.005', r: '1.5 nm gate oxide, 35 nm spacer, 5 nm recess' },
+    { c: 'fset STI_depth 0.45  ;  fset STI_tilt 87.0  ;  fset VIA_tilt 82.0', r: 'trench 450 nm deep, near-vertical walls' },
+    { c: 'fset CoSi_thick 0.020  ;  fset Metal1 0.15  ;  fset Divot 0.01', r: '20 nm silicide, 150 nm ILD, 10 nm divot' },
+    { c: 'fset fp 1.0  ;  fset FastMode 0', r: 'mesh multiplier; 0 = run the real implants/anneals' },
+  ],
+  what: 'One parameter block feeds every etch rate, deposition thickness and refinement box below.',
+  why: '<p>Everything downstream is written in terms of these variables, which is why you can read the flow as a recipe. Two of them deserve attention.</p><p><code>fp</code> is a global <strong>mesh multiplier</strong>. Every refinement spacing is divided by it, so <code>fp = 2</code> halves the element size everywhere at once. Increase it when the doping profiles look under-resolved; expect runtime to climb steeply.</p><p><code>FastMode</code> gates every <code>implant</code> and <code>diffuse</code> statement. With <code>FastMode 1</code> you get the geometry in minutes with no doping at all — useful for debugging masks and etch sequences before paying for the physics.</p>',
+},
+{
+  m: 'setup', t: 'Build the starting wafer', lines: '99–128', geom: 'bare', tag: 'setup',
+  cmd: [
+    { c: 'line x location= 0.0 tag= top     ;    line x location= $Tsub tag= bottom', r: '10 µm of substrate' },
+    { c: 'region Silicon substrate xlo= top xhi= bottom ylo= left yhi= right' },
+    { c: 'init Silicon field= Boron concentration= 1.0e15 wafer.orient= {0 0 1} \\\n     flat.orient= {1 1 0} slice.angle= 45 !DelayFullD', r: 'p− substrate, 1×10¹⁵ cm⁻³, (100) wafer' },
+    { c: 'AdvancedCalibration', r: 'loads the calibrated diffusion/damage model set' },
+    { c: 'pdbSet Mechanics StressHistory 1', r: 'track stress through the whole flow' },
+    { c: 'pdbSet ImplantData LeftBoundary Reflect', r: 'reflecting implant boundaries (also right/front/back)' },
+  ],
+  what: 'A p-type (100) wafer doped 1×10¹⁵ cm⁻³, with the calibrated physics models switched on.',
+  why: '<p><code>AdvancedCalibration</code> is the single most important line in the file for accuracy. It replaces the default diffusion and point-defect parameters with Synopsys’ calibrated set for this technology node, so transient enhanced diffusion of boron, dose loss at interfaces and damage accumulation are all modelled with fitted coefficients. Without it the junction depths are decorative.</p><p><code>wafer.orient {0 0 1}</code> with <code>slice.angle 45</code> matters for two reasons: oxidation rate is orientation-dependent, and channelling during implantation depends on how the beam lines up with the lattice.</p><p>The reflecting implant boundaries make the narrow simulation domain behave as if it were one cell in a periodic array, so ions scattering sideways are not artificially lost at the edges.</p>',
+  dope: [],
+},
+
+/* ======================================================= 01 STI ========= */
+{
+  m: 'sti', t: 'Pad oxide and nitride hard mask', lines: '131–132', geom: 'pad',
+  cmd: [
+    { c: 'deposit material= {Oxide}   type= anisotropic  rate= {1.0} time= 0.01', r: 'rate × time = 1.0 × 0.01 = <b>10 nm</b> pad oxide' },
+    { c: 'deposit material= {Nitride} type= anisotropic  rate= {1.0} time= 0.1', r: '1.0 × 0.1 = <b>100 nm</b> Si₃N₄' },
+  ],
+  what: '10 nm of oxide, then 100 nm of nitride.',
+  why: '<p>This is the classic STI hard-mask stack. The nitride is the real mask: it resists the trench etch, and later it is the stop layer that defines where oxide is removed.</p><p>The thin <strong>pad oxide</strong> underneath is not optional. Nitride deposited directly on silicon puts the wafer under enormous tensile stress and generates dislocations at the active-area edge. The 10 nm oxide is a compliant buffer between the two.</p><p>Note the idiom <code>rate= {1.0} time= 0.01</code>: Sentaurus deposits rate×time, so writing rate as 1.0 makes <code>time</code> read directly as the thickness in µm.</p>',
+},
+{
+  m: 'sti', t: 'Active-area lithography', lines: '134', geom: 'actResist',
+  cmd: [{ c: 'photo mask= Active_n thickness= 0.2', r: '200 nm resist, patterned by the Active layer' }],
+  what: 'Resist covers the future active areas; the field is exposed.',
+  mask: { name: 'Active_n', pol: 'protects the active area', note: 'the first and most fundamental mask of the flow' },
+  why: '<p><code>photo</code> is an idealised lithography step: Sentaurus simply places resist everywhere the mask is dark, with perfectly vertical walls and no proximity or focus effects. Resist thickness still matters — later implant steps rely on it to stop ions.</p><p>The <code>_n</code> suffix is the <strong>polarity</strong> of the layer as defined in the layout file. <code>Active_n</code> leaves resist on the active area, so everything that follows is etched in the field only.</p>',
+},
+{
+  m: 'sti', t: 'Pattern the nitride, strip resist', lines: '137–138', geom: 'nitEtch',
+  cmd: [
+    { c: 'etch material= {Nitride} type= anisotropic rate= {0.1} time= 1.1', r: '0.1 × 1.1 = <b>110 nm</b> — 10% over-etch on 100 nm' },
+    { c: 'strip Photoresist' },
+  ],
+  what: 'The nitride is cut open in the field, and the resist has done its job.',
+  why: '<p>The 10 % over-etch is deliberate: deposition and etch both have across-wafer non-uniformity, so you always etch past nominal to guarantee the film is cleared everywhere. The pad oxide beneath absorbs the excess.</p><p><code>type= anisotropic</code> etches only in <i>−x</i>, so the nitride edge lands exactly under the resist edge. This is what transfers the mask dimension into the film.</p>',
+},
+{
+  m: 'sti', t: 'Clear the pad oxide in the field', lines: '141', geom: 'padEtch',
+  cmd: [{ c: 'etch material= {Oxide} type= anisotropic rate= {0.01} time= 1.1', r: '0.01 × 1.1 = <b>11 nm</b> on 10 nm of pad oxide' }],
+  what: 'Bare silicon is now exposed in the field.',
+  why: '<p>A separate step because the etch chemistry is different — and because specifying one material per <code>etch</code> keeps the selectivity explicit. The silicon surface must be clean before the trench etch, or the trench profile will be rough.</p>',
+},
+{
+  m: 'sti', t: 'Etch the shallow trench', lines: '144', geom: 'trench',
+  cmd: [{ c: 'etch material= {Silicon} type= trapezoidal rate= $STI_depth time= 1.0 angle= $STI_tilt', r: '0.45 µm deep, sidewall at <b>87°</b> → 23.6 nm of lateral taper' }],
+  what: '450 nm trench with slightly sloped walls, 87° from horizontal.',
+  why: '<p><strong>Why not 90°?</strong> Three reasons, and this is a favourite exam question:</p><ul><li>A tapered trench can be filled by CVD oxide without sealing off a void at the top. A re-entrant or perfectly vertical trench pinches shut and traps a keyhole.</li><li>A sloped wall spreads the stress concentration at the bottom corner instead of focusing it.</li><li>The gentler corner at the top reduces the field crowding that causes early sub-threshold leakage along the trench edge.</li></ul><p>The trade-off is area: 23.6 nm of taper per side eats into the active region, which is why the angle is 87° and not 80°.</p>',
+},
+{
+  m: 'sti', t: 'Liner oxidation', lines: '147–153', geom: 'liner',
+  cmd: [
+    { c: 'temp_ramp name= liner time= 5  temp= 600.0 ramprate= 0.6667', r: '600 → 800 °C over 5 min' },
+    { c: 'temp_ramp name= liner time= 10 temp= 800.0 hold', r: 'hold 800 °C for 10 min' },
+    { c: 'temp_ramp name= liner time= 5  temp= 800.0 ramprate= -0.6667', r: '800 → 600 °C over 5 min' },
+    { c: 'diffuse stress.relax temp_ramp= liner info= 1', r: 'run the cycle; let the mesh relax stress' },
+  ],
+  what: 'A thin thermal oxide is grown on the trench walls and bottom.',
+  anneal: { ramp: 'liner', label: 'Liner oxidation — 20 min, peak 800 °C' },
+  why: '<p>The trench etch leaves a plasma-damaged, dangling-bond-rich surface. Growing a few nanometres of <strong>thermal</strong> oxide consumes that damaged silicon and replaces the etched interface with a properly grown Si–SiO₂ interface. Everything deposited afterwards sits on good oxide, which is what keeps interface trap density and junction leakage low at the trench edge.</p><p><code>stress.relax</code> lets the mechanics solver find a new equilibrium as the oxide grows. Oxidation expands the volume by about 2.2×, so without this the mesh carries false stress forward through the whole flow — and because <code>StressHistory</code> is on, that stress would change later diffusion.</p><p>800 °C is low for oxidation. The liner only needs to be a few nanometres, and keeping the thermal budget small avoids rounding the trench corners prematurely.</p>',
+},
+{
+  m: 'sti', t: 'Strip the hard mask', lines: '155–156', geom: 'stripHM',
+  cmd: [{ c: 'strip nitride' }, { c: 'strip oxide' }],
+  what: 'Nitride, pad oxide and liner are all removed, leaving the bare trenched wafer.',
+  why: '<p>In this simplified flow the mask comes off before the fill, so the trench is filled and the surface planarised in one <code>deposit … type= fill</code> step. A production flow would keep the nitride as a CMP stop, polish back to it, and only then strip.</p><p><code>strip &lt;material&gt;</code> removes the exposed layer of that material everywhere — keep that in mind, because the same command appears again at the end of the file with much larger consequences.</p>',
+},
+{
+  m: 'sti', t: 'Round the trench corners', lines: '159–160', geom: 'cornerRound',
+  cmd: [
+    { c: 'etch    material= {Silicon} type= isotropic rate= {0.005} time= 1.0', r: 'remove 5 nm in every direction' },
+    { c: 'deposit material= {Silicon} type= isotropic rate= {0.005} time= 1.0', r: 'put 5 nm back' },
+  ],
+  what: 'A 5 nm isotropic etch followed by a 5 nm isotropic deposition — net thickness unchanged, corners rounded.',
+  why: '<p>This looks like a no-op and is actually a geometry trick. An isotropic etch retreats equally in all directions, which rounds a convex corner; the matching isotropic deposition restores the surface position but cannot recreate the sharp vertex. The result is a rounded corner with the original dimensions.</p><p>It matters because the top trench corner is where the gate wraps over the active edge. A sharp corner there means locally thinner gate oxide and field crowding — a parasitic low-Vᴛ transistor in parallel with the real one, which shows up as a hump in the sub-threshold characteristic. Rounding it is cheap insurance.</p><p>It also helps the mesher: level-set surfaces with sharp vertices generate badly shaped elements.</p>',
+},
+{
+  m: 'sti', t: 'Fill the trench with oxide', lines: '163', geom: 'oxFill',
+  cmd: [{ c: 'deposit material= {Oxide} type= fill  coord= -0.002', r: 'fill up to x = −0.002 → 2 nm of oxide above the original surface' }],
+  what: 'The trench is filled and the wafer is planar, with 2 nm of oxide over the active area.',
+  why: '<p><code>type= fill</code> is the idealised stand-in for deposit-plus-CMP: it fills every cavity and planarises to the given coordinate in one step, with no voids and no dishing. Remember that <code>coord</code> is a depth, so the negative value means <i>above</i> the surface.</p><p>Why leave 2 nm on top rather than stopping at zero? It guarantees the fill is continuous across the whole wafer with no pinholes at the active edge, and the next module removes it deliberately as part of setting the divot.</p>',
+},
+{
+  m: 'sti', t: 'Refine the mesh over the active area', lines: '166–170', geom: 'oxFill', mesh: 'vt',
+  cmd: [
+    { c: 'refinebox name= Vt mask= Active_p \\\n extend= 0.015 extrusion.min= -0.001 extrusion.max= 1.5 \\\n xrefine= "0.005 0.02/$fp" yrefine= "$PolyPitch/(25.0*$fp)" zrefine= "$IsoPitch/(20.0*$fp)"', r: 'x: 5 → 20 nm,  y: 0.32/25 = <b>12.8 nm</b>,  z: 0.345/20 = <b>17.3 nm</b>' },
+    { c: 'grid remesh' },
+  ],
+  what: 'A refinement box is tied to the Active mask, then the mesh is rebuilt.',
+  why: '<p>This is the most important idea in process simulation meshing: refinement boxes are <strong>attached to mask layers</strong>, not to fixed coordinates. <code>mask= Active_p</code> means the box follows the active area wherever the layout puts it, and <code>extend= 0.015</code> pads it 15 nm beyond so the box edge never lands on the junction you are trying to resolve.</p><p>The anisotropic spacing is deliberate. Doping varies fastest with depth, so <code>xrefine</code> starts at 5 nm near the surface and coarsens to 20 nm; lateral spacing can be much looser because nothing changes quickly along the channel at this stage.</p><p><code>grid remesh</code> is what actually rebuilds the mesh. Boxes do nothing until you remesh.</p>',
+},
+
+/* ====================================================== 02 WELL ========= */
+{
+  m: 'well', t: 'Open the p-well', lines: '173', geom: 'oxFill',
+  cmd: [{ c: 'photo mask= pWELL_n thickness= 1.0', r: '1 µm of resist — thick enough to stop a 250 keV boron implant' }],
+  what: 'For the NMOS domain this mask opens the whole simulated area.',
+  mask: { name: 'pWELL_n', pol: 'opens the p-well (NMOS) region', note: 'in the NMOS domain the entire area is exposed' },
+  why: '<p>1 µm of resist is not arbitrary. The deepest implant here is boron at 250 keV. Boron is light and resist is less dense than silicon, so its projected range in resist is on the order of 0.8 µm — and the film has to stop the whole distribution including the straggle and the tail, not just the peak. A micron is the margin that keeps boron out of the n-well.</p><p>Because <code>@Domain@ = NMOS</code>, this mask is fully open over the simulated region. The complementary step a few lines later is fully <i>closed</i> — watch for it.</p>',
+},
+{
+  m: 'well', t: 'p-well and Vᴛ chain implant', lines: '177–183', geom: 'oxFill',
+  cmd: [
+    { c: 'implant Boron dose= 1.0e12 energy= 250 tilt= 0.0', r: 'deep isolation' },
+    { c: 'implant Boron dose= 1.0e12 energy= 200 tilt= 0.0' },
+    { c: 'implant Boron dose= 1.0e12 energy= 100 tilt= 0.0' },
+    { c: 'implant Boron dose= 5.0e12 energy=  80 tilt= 0.0', r: 'anti-punchthrough' },
+    { c: 'implant Boron dose= 5.0e12 energy=  40 tilt= 0.0' },
+    { c: 'implant Boron dose= 6.0e12 energy=  20 tilt= 0.0', r: 'Vᴛ adjust' },
+    { c: 'implant Boron dose= 6.0e12 energy=  10 tilt= 0.0', r: 'Vᴛ adjust, shallowest' },
+  ],
+  what: 'Seven boron implants from 250 keV down to 10 keV build a retrograde well in one lithography step.',
+  implant: { sp: 'B', n: 7, dose: '1.0–6.0×10¹²', energy: '250 → 10 keV', tilt: 0, blocked: false },
+  why: '<p>This chain is the heart of a modern well. Rather than implanting once and diffusing deep (which spreads laterally and costs area), you <strong>stack several energies</strong> to sculpt the profile directly, then anneal only enough to repair damage and activate.</p><p>Read it from the bottom up and each implant has a job:</p><ul><li><b>10–20 keV, 6×10¹²</b> — sets the surface concentration, and therefore the threshold voltage. This is the Vᴛ-adjust implant.</li><li><b>40–80 keV, 5×10¹²</b> — a buried peak below the channel that blocks drain-to-source punchthrough without raising surface doping (which would spoil mobility).</li><li><b>100–250 keV, 1×10¹²</b> — the well proper: isolation from the substrate and latch-up suppression.</li></ul><p>The result is a <strong>retrograde</strong> profile — lower doping at the surface than just beneath it. That is what lets you have good short-channel control and good carrier mobility at the same time.</p><p>All at <code>tilt= 0</code>: these are deep implants where channelling is handled by the calibrated models and no shadowing is wanted.</p>',
+  dope: ['pwell'],
+},
+{
+  m: 'well', t: 'Close the p-well mask, open the n-well', lines: '186–189', geom: 'wellBlock',
+  cmd: [
+    { c: 'strip Photoresist' },
+    { c: 'photo mask= pWELL_p thickness= 1.0', r: 'the complementary polarity — opens the n-well' },
+  ],
+  what: 'The same layer at opposite polarity. In the NMOS domain this covers everything.',
+  mask: { name: 'pWELL_p', pol: 'opens the n-well (PMOS) region', note: 'fully covers the NMOS domain — the next implants do nothing here' },
+  why: '<p><code>pWELL_n</code> and <code>pWELL_p</code> are the same drawn layer at the two polarities, so together they tile the wafer with no gap and no overlap. That is how a single drawn well layer produces a complementary pair of masks.</p><p>Since we are simulating the NMOS domain, this resist blankets the entire simulated region.</p>',
+},
+{
+  m: 'well', t: 'n-well implant — blocked in this domain', lines: '192–199', geom: 'wellBlock',
+  cmd: [
+    { c: 'implant Phosphorus dose= 5.0e12 energy= 300 tilt= 0.0' },
+    { c: 'implant Phosphorus dose= 5.0e12 energy= 250 tilt= 0.0' },
+    { c: 'implant Phosphorus dose= 8.0e12 energy= 100 tilt= 0.0' },
+    { c: 'implant Phosphorus dose= 8.0e12 energy=  50 tilt= 0.0' },
+    { c: 'implant Phosphorus dose= 8.5e12 energy=  20 tilt= 0.0' },
+    { c: 'strip Photoresist' },
+  ],
+  what: 'Five phosphorus implants land entirely in the resist. Nothing reaches the silicon.',
+  implant: { sp: 'P', n: 5, dose: '5.0–8.5×10¹²', energy: '300 → 20 keV', tilt: 0, blocked: true },
+  why: '<p><strong>This step is here but does nothing in the NMOS domain</strong>, and understanding why is the point. The script is domain-agnostic: the identical file, run with <code>@Domain@ = PMOS</code>, has <code>pWELL_p</code> open and <code>pWELL_n</code> closed, so the phosphorus chain builds the n-well instead. One file, two devices.</p><p>It is also exactly how the real process works — both implants happen on every wafer, and the masks decide where each lands.</p><p>Note the mirror symmetry of the recipe: phosphorus at higher energies than boron for the same depth, because the heavier ion has a shorter range per keV.</p>',
+},
+{
+  m: 'well', t: 'Well drive-in — spike anneal', lines: '201–211', geom: 'oxFill',
+  cmd: [
+    { c: 'temp_ramp name= well time= 0.03  temp= 600.0  ramprate= 250.0', r: '600 → 1050 °C in 1.8 s' },
+    { c: 'temp_ramp name= well time= 0.333 temp= 1050.0 ramprate= 0.0', r: 'hold 1050 °C for 20 s' },
+    { c: 'temp_ramp name= well time= 0.083 temp= 1050.0 ramprate= -90.0', r: '1050 → 600 °C in 5 s' },
+    { c: 'diffuse stress.relax temp_ramp= well' },
+    { c: 'SetPlxList { BTotal PTotal }\nWritePlx n@node@_well.plx y= $Ymid', r: '1-D cut at the channel centre' },
+  ],
+  what: 'A fast 1050 °C spike: activate the dopant and repair the damage, diffuse as little as possible.',
+  anneal: { ramp: 'well', label: 'Well drive-in — 27 s total, peak 1050 °C' },
+  why: '<p>Note the asymmetry: <strong>250 °C/s up, 90 °C/s down</strong>, with only 20 s at peak. This is a <strong>spike anneal</strong>, and the shape is the whole design.</p><p>Dopant activation needs high temperature but happens quickly. Diffusion needs high temperature and <i>time</i>. By ramping as fast as the lamps allow and dwelling briefly, you buy almost all of the activation for a fraction of the diffusion. This is the central trade-off of modern thermal processing, and it is why RTA replaced furnace anneals below about 0.25 µm.</p><p>There is a second effect the calibrated models capture: implant damage creates a huge excess of silicon interstitials, which temporarily accelerate boron diffusion far above equilibrium (<strong>transient enhanced diffusion</strong>). A fast ramp gets past the TED window before much boron has moved.</p><p><code>WritePlx</code> writes a 1-D doping profile along a vertical cut at <code>y = Ymid</code>, the channel centre — this is the file you plot to check that the retrograde well came out as intended.</p>',
+  dope: ['pwell'],
+  probe: { y: 0, label: 'WritePlx cut — channel centre' },
+},
+{
+  m: 'well', t: 'Divot etch — recess the STI oxide', lines: '214–215', geom: 'divot',
+  cmd: [
+    { c: 'etch material= {Oxide} type= anisotropic  rate= {(0.001+$Divot)*0.8} time= 1.0', r: '(0.001 + 0.010) × 0.8 = <b>8.8 nm</b> vertically' },
+    { c: 'etch material= {Oxide} type= isotropic    rate= {(0.001+$Divot)*0.2} time= 1.0', r: '(0.001 + 0.010) × 0.2 = <b>2.2 nm</b> in all directions' },
+  ],
+  what: 'The 2 nm oxide over the active area is removed and the STI is recessed ~9 nm, leaving a small divot at the silicon edge.',
+  why: '<p>Two etches with an 80/20 split between anisotropic and isotropic, which is how you model a real wet or mixed clean that has some lateral component.</p><p>The purpose is to expose bare silicon for the gate oxide, but the side effect is the <strong>divot</strong>: the isotropic component attacks the oxide right at the silicon/STI corner, cutting a notch there. That notch is not cosmetic. The gate poly will later fill it and wrap slightly down the side of the active edge, creating exactly the parasitic edge transistor that the corner rounding was meant to suppress.</p><p>Controlling divot depth is a real process knob — which is why it is a named parameter, <code>Divot</code>, and why it reappears in the device meshing at the end of the file as <code>extrusion.max= $Divot-0.002</code>.</p>',
+  dope: ['pwell'],
+},
+
+/* ======================================================= 03 GOX ========= */
+{
+  m: 'gox', t: 'Grow the gate oxide', lines: '221', geom: 'gox',
+  cmd: [{ c: 'deposit material= {Oxide} type= isotropic rate= $gox time= 1.0', r: '<b>1.5 nm</b> of SiO₂' }],
+  what: '1.5 nm of gate dielectric — roughly five atomic layers.',
+  why: '<p>Modelled as a conformal deposition rather than a grown oxide to keep the step cheap; the densification anneal that follows is what makes it behave like thermal oxide.</p><p>1.5 nm is at the limit of what SiO₂ can do. Direct tunnelling gate leakage rises roughly an order of magnitude per 0.2 nm of thinning, and below about 1.2 nm it dominates the off-state current. This is the wall that pushed the industry to high-κ dielectrics one or two nodes later.</p><p>In the drawing this layer is exaggerated — at true scale 1.5 nm would be well under one pixel.</p>',
+  dope: ['pwell'],
+},
+{
+  m: 'gox', t: 'Densify the gate oxide', lines: '224–230', geom: 'gox',
+  cmd: [
+    { c: 'temp_ramp name= gateox time= 24    temp= 600.0 ramprate= 0.0972', r: '600 → 740 °C over 24 min' },
+    { c: 'temp_ramp name= gateox time= 20    temp= 740.0 ramprate= 0.0', r: 'hold 740 °C for 20 min' },
+    { c: 'temp_ramp name= gateox time= 0.093 temp= 740.0 ramprate= -25.0', r: '740 → 600 °C in 5.6 s' },
+    { c: 'diffuse stress.relax temp_ramp= gateox' },
+  ],
+  what: 'A long, gentle 740 °C cycle — 44 minutes in total.',
+  anneal: { ramp: 'gateox', label: 'Gate oxide densification — 44 min, peak 740 °C' },
+  why: '<p>Compare this with the well spike: 44 minutes at 740 °C instead of 27 seconds at 1050 °C. The thermal budget is chosen for a completely different purpose.</p><p>What matters here is the <strong>oxide quality</strong> — densifying the film, relieving the strain at the Si–SiO₂ interface and passivating dangling bonds. That is a slow, low-temperature process. And because the well profile has already been set, the thermal budget must stay low enough that the retrograde shape survives. 740 °C is far below the temperature where boron moves appreciably, so you can afford the time.</p><p>This ordering is a general rule: once a doping profile is in place, every subsequent thermal step is constrained by it. The flow is written hottest-first.</p>',
+  dope: ['pwell'],
+},
+
+/* ====================================================== 04 POLY ========= */
+{
+  m: 'poly', t: 'Deposit the polysilicon gate', lines: '233', geom: 'polyDep',
+  cmd: [{ c: 'deposit material= {Poly} type= isotropic  thickness= $Tpoly', r: '<b>160 nm</b> of polysilicon, conformal' }],
+  what: '160 nm of poly blankets the wafer, following the topography.',
+  why: '<p><code>thickness=</code> is used here instead of rate×time — the two forms are interchangeable.</p><p>The gate height is a genuine trade-off. Tall poly gives lower gate sheet resistance and stops the S/D implants more reliably, but makes the gate etch harder (higher aspect ratio) and increases gate-to-contact capacitance. 160 nm against a 130 nm gate length is about 1.2:1 — comfortable for this node.</p><p>Being <code>isotropic</code>, the poly is conformal: it follows the small step over the recessed STI and fills the divot. That filled divot is the parasitic edge device.</p>',
+  dope: ['pwell'],
+},
+{
+  m: 'poly', t: 'Gate lithography — the critical layer', lines: '236', geom: 'polyResist',
+  cmd: [{ c: 'photo mask= POLY_n thickness= 0.2', r: '200 nm resist over the gate; opening set by @Lgate@ = 0.13 µm' }],
+  what: 'Resist remains only over the gate, 130 nm wide.',
+  mask: { name: 'POLY_n', pol: 'protects the gate', note: 'the critical dimension of the whole process' },
+  why: '<p>This is the layer that defines the transistor. Gate length sets drive current, short-channel behaviour and switching speed, so the CD control on this mask is tighter than on any other layer, and it is the layer the stretch mark at the top of the file manipulates.</p><p>The resist is thin — 200 nm — because thin resist resolves fine features better. It only has to survive the poly etch, not stop an implant.</p>',
+  dope: ['pwell'],
+},
+{
+  m: 'poly', t: 'Etch the gate', lines: '239–243', geom: 'polyEtch',
+  cmd: [
+    { c: 'etch  material= {Poly} type= anisotropic rate= $Tpoly+$gox time= 1.0', r: '0.160 + 0.0015 = <b>161.5 nm</b> — poly thickness plus the gate oxide' },
+    { c: 'strip Photoresist' },
+  ],
+  what: 'Poly is cleared everywhere except under the resist. The gate stack now exists.',
+  why: '<p>The etch depth is written as <code>$Tpoly+$gox</code> — just enough over-etch to guarantee the poly is cleared even where it sits on top of the gate oxide step. Because <code>material= {Poly}</code>, the gate oxide itself is untouched and still covers the source/drain regions; it is removed deliberately two steps later.</p><p>A highly anisotropic etch is essential. Any lateral component eats into the gate and shortens the channel below the drawn dimension, directly degrading Vᴛ roll-off and leakage.</p>',
+  dope: ['pwell'],
+},
+{
+  m: 'poly', t: 'Smooth the poly profile', lines: '245–246', geom: 'gateSmooth',
+  cmd: [
+    { c: 'etch    material= {Poly} type= isotropic rate= {0.005} time= 1.0' },
+    { c: 'deposit material= {Poly} type= isotropic rate= {0.005} time= 1.0 selective.materials= {Poly}', r: 'grows only on existing poly' },
+  ],
+  what: 'The same etch-and-replace trick as the trench corners, this time on the gate.',
+  why: '<p>Rounding the top corners of the gate matters for the spacer that comes next: a sharp corner produces a thin spot in the conformal nitride, and the anisotropic spacer etch can punch through it. It also removes the sharp foot at the base of the gate, where field crowding would thin the gate oxide locally.</p><p><code>selective.materials= {Poly}</code> is what keeps this from coating the whole wafer — the deposition is allowed only on poly surfaces.</p>',
+  dope: ['pwell'],
+},
+
+/* ====================================================== 05 REOX ========= */
+{
+  m: 'reox', t: 'Open the source/drain and recess the silicon', lines: '250–251', geom: 'sdRecess',
+  cmd: [
+    { c: 'etch material= {Oxide} type= anisotropic rate= $gox time= 1.0', r: 'remove the <b>1.5 nm</b> gate oxide outside the gate' },
+    { c: 'etch material= {Silicon} type= trapezoidal rate= $SiRecess time= 1.0 angle= 45.0', r: '<b>5 nm</b> recess, 45° slope at the gate edge' },
+  ],
+  what: 'Gate oxide is cleared from the S/D, then 5 nm of silicon is removed with a gentle 45° ramp.',
+  why: '<p>The gate oxide has to go before the extension implants, otherwise it scatters the very low energy ions and spoils the shallow profile.</p><p>The 5 nm silicon recess is subtler. It removes the surface layer most damaged by the gate etch and the oxide strip, so the extension implant starts from clean crystal. The 45° angle keeps the step under the gate edge gradual — a vertical step there would concentrate field and make the extension-to-channel junction abrupt in the wrong way.</p><p>This is also the point where the gate oxide under the gate becomes a closed region, sealed between poly above and silicon below. That matters at the very end of the file.</p>',
+  dope: ['pwell'],
+},
+{
+  m: 'reox', t: 'Poly re-oxidation', lines: '255–266', geom: 'reox',
+  cmd: [
+    { c: 'deposit material= {Oxide} type= isotropic rate= {1.0} time= $PolyReox', r: '1.0 × 0.005 = <b>5 nm</b> conformal oxide' },
+    { c: 'temp_ramp name= polyreox time= 0.0667 temp= 600.0 ramprate= 50.0', r: '600 → 800 °C in 4 s' },
+    { c: 'temp_ramp name= polyreox time= 0.0833 temp= 900.0 ramprate=  0.0', r: 'hold 900 °C for 5 s' },
+    { c: 'temp_ramp name= polyreox time= 0.0667 temp= 800.0 ramprate= -50.0', r: 'back down to 600 °C' },
+    { c: 'diffuse stress.relax temp_ramp= polyreox' },
+  ],
+  what: '5 nm of oxide over the gate and the exposed silicon, then a 21 second 900 °C cycle.',
+  anneal: { ramp: 'polyreox', label: 'Poly re-oxidation — 21 s total, peak 900 °C' },
+  why: '<p>Re-oxidation does three jobs at once, and it is worth being able to list them:</p><ul><li><strong>Seals the gate edge.</strong> The poly sidewall after etch is rough and electrically leaky; a thin oxide there restores the gate-to-extension isolation.</li><li><strong>Rounds the gate foot.</strong> Oxidation consumes silicon fastest at the sharp bottom corner, which smooths the critical point where the gate oxide meets the extension junction and relieves the local field.</li><li><strong>Repairs the S/D surface</strong> before implantation.</li></ul><p>The thermal cycle is short and only reaches 900 °C, because at this point the well profile is already fixed. 21 seconds is the entire budget.</p>',
+  dope: ['pwell'],
+},
+
+/* ======================================================= 06 EXT ========= */
+{
+  m: 'ext', t: 'Refine the mesh for the extension', lines: '271–284', geom: 'reox', mesh: 'halo',
+  cmd: [
+    { c: 'refinebox name= HALO mask= Active_p \\\n xrefine= "0.004/$fp"  yrefine= "$PolyPitch/(100.0*$fp)" zrefine= "$IsoPitch/(60.0*$fp)"', r: 'x 4 nm, y 0.32/100 = <b>3.2 nm</b>, z 5.8 nm' },
+    { c: 'refinebox name= YEXT mask= Mesh_EXT_p \\\n extend= 0.002 extrusion.min= -$gox extrusion.max= 0.035 \\\n xrefine= "0.001/$fp"  yrefine= "0.0015/$fp" … Silicon', r: 'x <b>1 nm</b>, y <b>1.5 nm</b> — the finest box in the file' },
+    { c: 'refinebox name= EXT_IF mask= Active_p \\\n min.normal.size= 0.0002/$fp normal.growth.ratio= 1.5 \\\n interface.materials = {Silicon Oxide PolySilicon Oxide}', r: 'first layer <b>0.2 nm</b> thick, growing 1.5× per layer' },
+    { c: 'grid remesh' },
+  ],
+  what: 'Three nested boxes bring the mesh down to 1 nm laterally and 0.2 nm at the gate oxide interface.',
+  why: '<p>The flow pauses to re-mesh because what comes next is the hardest thing in the file to resolve: a junction only tens of nanometres deep whose lateral position under the gate edge sets the short-channel behaviour of the device.</p><p>Note how the three boxes divide the work:</p><ul><li><code>HALO</code> covers the whole active area at moderate refinement.</li><li><code>YEXT</code> is tied to a dedicated layout layer, <code>Mesh_EXT_p</code>, drawn purely to mark where the mesh needs to be fine. Masks are used as meshing instructions, not only as process masks.</li><li><code>EXT_IF</code> is an <strong>interface</strong> box: instead of a uniform spacing it builds a boundary-layer mesh, 0.2 nm at the Si–SiO₂ interface growing geometrically by 1.5×. That is what resolves the inversion layer later in the device simulation.</li></ul><p>Named boxes are also how you clear them selectively — <code>refinebox clear</code> appears at the end.</p>',
+  dope: ['pwell'],
+},
+{
+  m: 'ext', t: 'Halo (pocket) implant — four rotations', lines: '286–294', geom: 'reox',
+  cmd: [
+    { c: 'photo mask= pWELL_n thickness= 0.5', r: '500 nm resist — thinner now, the implants are shallower' },
+    { c: 'implant Boron dose= 8.0e12 energy= 25.0 tilt= 30 rotation= 0' },
+    { c: 'implant Boron dose= 8.0e12 energy= 25.0 tilt= 30 rotation= 90' },
+    { c: 'implant Boron dose= 8.0e12 energy= 25.0 tilt= 30 rotation= 180' },
+    { c: 'implant Boron dose= 8.0e12 energy= 25.0 tilt= 30 rotation= -90', r: 'four rotations, 8×10¹² each → 3.2×10¹³ total' },
+  ],
+  what: 'Boron at 25 keV, tilted 30°, fired from four rotations 90° apart.',
+  implant: { sp: 'B', n: 4, dose: '8.0×10¹² ×4', energy: '25 keV', tilt: 30, blocked: false, rot: true },
+  why: '<p>The <strong>halo</strong> (or pocket) implant is the main short-channel-effect countermeasure, and the 30° tilt is the entire point. A tilted beam goes <i>under</i> the gate edge, placing extra p-type doping exactly where the drain depletion region would otherwise reach through toward the source.</p><p>The effect: Vᴛ roll-off is flattened and punchthrough suppressed, while the channel centre and the deep well stay lightly doped so mobility and junction capacitance are not hurt. It is a local fix for a local problem.</p><p><strong>Why four rotations?</strong> A single tilted implant is shadowed by the gate on one side, so the device would be asymmetric — source and drain would not behave alike. Firing at 0°, 90°, 180° and −90° with a quarter of the dose each averages the shadowing out and gives a symmetric device. In 3-D the ±90° rotations also dose the width direction, along the STI edge.</p><p>This is also why the dose is quoted per implant: four at 8×10¹² is 3.2×10¹³ cm⁻² in total.</p>',
+  dope: ['pwell', 'halo'],
+},
+{
+  m: 'ext', t: 'n-type S/D extension (NLDD)', lines: '297–301', geom: 'reox',
+  cmd: [
+    { c: 'implant Arsenic dose= 2.65e15 energy= 6.0 tilt= 0.0', r: 'very high dose at very low energy — Rₚ ≈ 10 nm' },
+    { c: 'strip Photoresist' },
+  ],
+  what: 'Arsenic, 2.65×10¹⁵ cm⁻² at only 6 keV.',
+  implant: { sp: 'As', n: 1, dose: '2.65×10¹⁵', energy: '6 keV', tilt: 0, blocked: false },
+  why: '<p>Note the combination: a dose two to three orders of magnitude above the halo, at an energy four times lower. That is the signature of a <strong>shallow extension</strong>.</p><p>Its job is to bridge the gap between the channel under the gate and the deep source/drain that sits outside the spacer. It must be:</p><ul><li><strong>Shallow</strong>, so the drain field does not reach deep into the channel — this is what controls short-channel effects.</li><li><strong>Heavily doped</strong>, so the series resistance between channel and contact stays low. Extension resistance is a large fraction of total device resistance at this node.</li></ul><p>Arsenic rather than phosphorus precisely because it is heavier: shorter range per keV and much less channelling, so the profile stays shallow and abrupt.</p><p>The gate itself acts as the mask. The extension is <strong>self-aligned</strong> to the gate edge — no lithography can place a junction with that accuracy.</p>',
+  dope: ['pwell', 'halo', 'next'],
+},
+{
+  m: 'ext', t: 'PMOS halo and extension — blocked', lines: '303–317', geom: 'haloBlock',
+  cmd: [
+    { c: 'photo mask= pWELL_p thickness= 0.5' },
+    { c: 'implant Arsenic dose= 3.3e13 energy= 28.0 tilt= 30 rotation= 0', r: 'n-type halo for the PMOS — four rotations' },
+    { c: 'implant Boron dose= 2.75e15  energy= 0.7 tilt= 0', r: 'PLDD — note <b>0.7 keV</b>' },
+    { c: 'strip Photoresist' },
+  ],
+  what: 'The complementary set, entirely absorbed by resist in this domain.',
+  implant: { sp: 'As/B', n: 5, dose: '3.3×10¹³ / 2.75×10¹⁵', energy: '28 / 0.7 keV', tilt: 30, blocked: true },
+  why: '<p>Worth looking at even though nothing happens here, because the asymmetry between NMOS and PMOS is instructive.</p><p>The p-type extension uses boron at <strong>0.7 keV</strong> — about one tenth the NLDD energy. Boron is light, so it penetrates much further per keV than arsenic and channels badly in silicon. To get a comparably shallow junction you have to drop to sub-keV energies, which is right at the limit of what an implanter can deliver with reasonable beam current.</p><p>This is a standing asymmetry in CMOS: making shallow p⁺ junctions is harder than shallow n⁺ junctions, and it is one reason PMOS short-channel control historically lagged NMOS.</p>',
+  dope: ['pwell', 'halo', 'next'],
+},
+{
+  m: 'ext', t: 'Save the as-implanted structure, then flash anneal', lines: '320–326', geom: 'reox',
+  cmd: [
+    { c: 'SetPlxList { Boron_Implant Arsenic_Implant }\nWritePlx n@node@_extimp.plx y= [expr $Ymid-($Lg2-0.01)]', r: 'cut 10 nm inside the gate edge: 0.065 − 0.01' },
+    { c: 'struct tdr= n@node@_asImplant', r: 'full structure saved before any diffusion' },
+    { c: 'diffuse time= 1.5<s> temp= 1000<C>', r: '<b>1.5 seconds</b> at 1000 °C' },
+  ],
+  what: 'The as-implanted profile is saved, then activated with a 1.5 second flash.',
+  anneal: { ramp: 'spike', label: 'Extension activation — 1.5 s at 1000 °C' },
+  why: '<p><strong>1.5 seconds.</strong> That is the entire thermal budget allowed for activating the extension, and it tells you how tightly the junction depth is constrained. Any longer and the shallow arsenic profile smears, the halo boron spreads into the channel, and the short-channel control you just engineered is gone.</p><p>The probe position is carefully chosen: <code>Ymid - (Lg2 - 0.01)</code> places the 1-D cut 10 nm inside the gate edge, in the middle of the extension-to-channel transition. That is the one profile that tells you whether the halo and the extension are in the right place relative to each other.</p><p>Saving <code>n@node@_asImplant</code> before the anneal is standard practice: with the as-implanted and annealed structures both on disk you can separate the implant profile from the diffusion, which is exactly what you need when calibrating.</p>',
+  dope: ['pwell', 'halo', 'next'],
+  probe: { y: -(0.065 - 0.01), label: 'WritePlx cut — 10 nm inside the gate edge' },
+},
+
+/* ======================================================== 07 SD ========= */
+{
+  m: 'sd', t: 'Deposit the spacer films', lines: '331–335', geom: 'oxSpacer',
+  cmd: [
+    { c: 'deposit material= {Nitride} type= isotropic  rate= {1.0} time= $Lsp', r: '<b>35 nm</b> conformal nitride' },
+    { c: 'deposit material= {Oxide} type= isotropic  rate= {1.0} time= 1.2*$Lsp', r: '1.2 × 0.035 = <b>42 nm</b> conformal oxide' },
+  ],
+  what: '35 nm nitride then 42 nm oxide, both conformal over the gate.',
+  why: '<p>Conformality is everything here. Because both films coat the vertical gate sidewall to the same thickness as the horizontal surfaces, an anisotropic etch afterwards leaves material only on the sidewalls. The spacer width is set by the <i>deposited thickness</i>, not by lithography — which is how you get a 77 nm feature reproducibly at a node whose minimum printable dimension is 130 nm.</p><p>Two films rather than one gives a selectivity handle: the nitride can be etched with the oxide as a stop, or stripped later without attacking the oxide. The nitride directly against the gate is also a better diffusion barrier.</p>',
+  dope: ['pwell', 'halo', 'next'],
+},
+{
+  m: 'sd', t: 'Anisotropic spacer etch', lines: '337–341', geom: 'natOx',
+  cmd: [
+    { c: 'etch material= {Oxide Nitride} type= anisotropic rate= {1.5*$Lsp 1.5*$Lsp} time= 2.0 force.full.levelset', r: '0.0525 × 2.0 = <b>105 nm</b> vertical on 77 nm of film' },
+    { c: 'deposit material= {Oxide} type= isotropic rate= $Nat_oxide time= 1.0 temperature= 500<C>', r: '<b>2 nm</b> screen oxide' },
+  ],
+  what: 'The films clear from every horizontal surface and survive only on the gate sidewalls. The spacer is formed.',
+  why: '<p>This is the step the previous one was setting up. A purely vertical etch removes 105 nm of film measured downwards; on a horizontal surface that clears all 77 nm with margin, but against a vertical sidewall the film is 77 nm <i>thick horizontally</i> and the vertical etch barely touches it. What remains is the spacer.</p><p><code>force.full.levelset</code> tells Sentaurus to use the full level-set engine rather than a simplified geometric etch — necessary because the surface is genuinely complex here, with the gate corner, the spacer foot and the STI step all evolving together.</p><p>The over-etch has a side effect worth noticing: after clearing 77 nm of spacer film the remaining ~23 nm of budget cuts further into the STI oxide, so the field recess deepens to roughly 32 nm.</p><p>The 2 nm oxide that follows is a <strong>screen oxide</strong>: it keeps the high-dose implant from sputtering the silicon surface and gives the dose a consistent starting condition.</p>',
+  dope: ['pwell', 'halo', 'next'],
+},
+{
+  m: 'sd', t: 'n⁺ deep source/drain implant', lines: '344–352', geom: 'natOx',
+  cmd: [
+    { c: 'photo mask= pWELL_n thickness= 0.5' },
+    { c: 'implant Arsenic dose= 5.5e15 energy= 55.0 tilt= 0.0 rotation= 0.0', r: '<b>5.5×10¹⁵ cm⁻² at 55 keV</b> — the heaviest implant in the flow' },
+    { c: 'strip Photoresist' },
+  ],
+  what: 'Arsenic at 55 keV, now masked by the spacer as well as the gate.',
+  implant: { sp: 'As', n: 1, dose: '5.5×10¹⁵', energy: '55 keV', tilt: 0, blocked: false },
+  why: '<p>Compare with the extension: nine times the energy and twice the dose. This is the <strong>deep</strong> source/drain, and it is doing a different job — carrying current with minimal resistance and providing a region deep enough to silicide without punching through the junction.</p><p>The spacer is what makes the two-step structure work. It holds this deep, heavily damaged implant <strong>77 nm away from the gate edge</strong>, so near the channel the junction is still defined by the shallow extension. Without the spacer this implant would sit right at the channel edge and the device would have severe short-channel leakage.</p><p>That is the whole logic of the LDD / extension architecture: shallow and abrupt where the field is, deep and conductive where the current is.</p>',
+  dope: ['pwell', 'halo', 'next', 'nplus'],
+},
+{
+  m: 'sd', t: 'p⁺ S/D — blocked, then the activation anneal', lines: '354–370', geom: 'hddBlock',
+  cmd: [
+    { c: 'photo mask= pWELL_p thickness= 0.5' },
+    { c: 'implant Boron dose= 2.0e15 energy= 5.5 tilt= 0.0 rotation= 0.0', r: 'PMOS S/D — blocked in this domain' },
+    { c: 'strip Photoresist' },
+    { c: 'struct tdr= n@node@_asImpHDD' },
+    { c: 'diffuse time= 1.5<s> temp= 1000<C>', r: '1.5 s at 1000 °C — the last high-temperature step' },
+    { c: 'SetPlxList { BTotal AsTotal PTotal}\nWritePlx n@node@_anneal.plx y= [expr $Ymid-($Lg2-0.01)]' },
+  ],
+  what: 'The PMOS implant is absorbed by resist. Then one 1.5 second flash activates everything.',
+  implant: { sp: 'B', n: 1, dose: '2.0×10¹⁵', energy: '5.5 keV', tilt: 0, blocked: true },
+  anneal: { ramp: 'spike', label: 'S/D activation — 1.5 s at 1000 °C' },
+  why: '<p>This anneal has to do a lot in 1.5 seconds: activate 5.5×10¹⁵ cm⁻² of arsenic, and re-grow the silicon that such a dose has driven amorphous. Solid-phase epitaxial regrowth is fast, so the short time is enough — but only just.</p><p>It is also the <strong>last</strong> step above 900 °C in the entire flow. Everything after this is at 500 °C or below, because from here on the junctions are final and the silicide cannot tolerate heat. If you are asked where the thermal budget of a CMOS flow is spent, the answer is: almost all of it before this line.</p><p>The final <code>WritePlx</code> collects <code>BTotal</code>, <code>AsTotal</code> and <code>PTotal</code> at the same cut as before — this is the profile you compare against the as-implanted one to see exactly how much diffusion the two flash anneals cost.</p>',
+  dope: ['pwell', 'halo', 'next', 'nplus'],
+  probe: { y: -(0.065 - 0.01), label: 'WritePlx cut — final junction profile' },
+},
+
+/* ======================================================= 08 SIL ========= */
+{
+  m: 'sil', t: 'Pre-silicide clean', lines: '375–379', geom: 'siConsume',
+  cmd: [
+    { c: 'etch material= {Oxide Nitride} type= isotropic  rate= {$Nat_oxide $Nat_oxide} time= 1.45', r: '0.002 × 1.45 = <b>2.9 nm</b> — clears the 2 nm screen oxide' },
+    { c: 'etch material= {Silicon} type= isotropic rate= {0.008} time= 1.0', r: '<b>8 nm</b> of silicon removed' },
+  ],
+  what: 'The screen oxide comes off and 8 nm of silicon is consumed, exposing clean crystal.',
+  why: '<p>Silicide formation is a reaction between metal and silicon, and it will not nucleate uniformly through even a native oxide. The clean is therefore mandatory, and the 8 nm silicon etch removes the implant-damaged surface layer so the reaction front is uniform.</p><p>Note that <code>material= {Silicon}</code> does <strong>not</strong> include <code>PolySilicon</code> — Sentaurus treats them as different materials. The gate top is not recessed by this etch.</p>',
+  dope: ['pwell', 'halo', 'next', 'nplus'],
+},
+{
+  m: 'sil', t: 'Form the cobalt silicide', lines: '382–385', geom: 'cosi',
+  cmd: [
+    { c: 'diffuse stress.relax time= 60<s>  temperature= 20<C> ramprate= [ expr (500.0 - 20.0)/60.0 ]<C/s>', r: 'room temperature → 500 °C over 60 s (8 °C/s)' },
+    { c: 'deposit material= {CobaltSilicide} type= isotropic rate= $CoSi_thick time= 1.0 temperature= 500 selective.materials= {Silicon}', r: '<b>20 nm</b> CoSi₂, only on single-crystal silicon' },
+  ],
+  what: '20 nm of CoSi₂ forms on the source and drain. Self-aligned — no mask involved.',
+  why: '<p><strong>Salicide</strong> — self-aligned silicide — is one of the elegant ideas in CMOS. Cobalt is deposited everywhere and reacts only where it touches silicon; wherever it sits on oxide or nitride it stays unreacted metal and is simply washed off. The silicide therefore appears exactly on the source, drain and gate with no lithography at all, which is the only way to land a low-resistance contact on a 130 nm gate.</p><p>Its purpose is resistance: CoSi₂ is roughly 15–20 µΩ·cm against several hundred for heavily doped silicon, so it short-circuits the sheet resistance of the S/D and converts the contact to a metal–metal interface.</p><p>One detail specific to this script: <code>selective.materials= {Silicon}</code> excludes <code>PolySilicon</code>, so <strong>the gate is left unsilicided here</strong> — a simplification of the real flow. Consistently, line 480 puts the gate contact directly on <code>PolySilicon</code>, while line 481 puts the source contact on <code>CobaltSilicide</code>.</p><p>The 500 °C ceiling is the thermal limit from now on. CoSi₂ agglomerates and its resistance rises if taken much hotter.</p>',
+  dope: ['pwell', 'halo', 'next', 'nplus'],
+},
+{
+  m: 'sil', t: 'Oxynitride liner and ILD fill', lines: '387–392', geom: 'ildDep',
+  cmd: [
+    { c: 'deposit material= {Oxynitride} type= isotropic rate= 0.05 time= 1.0 steps= 6 temperature= 500', r: '<b>50 nm</b> liner, deposited in 6 sub-steps for mesh quality' },
+    { c: 'deposit material= {Oxide} type= fill coord= -$Metal1-0.1', r: 'fill to x = −0.25 → <b>250 nm</b> of ILD above the surface' },
+    { c: 'diffuse stress.relax time= 60<s> temperature= 500<C>  ramprate= [ expr (20.0 - 500.0)/60.0 ]<C/s>', r: 'ramp back down to room temperature' },
+  ],
+  what: 'A 50 nm oxynitride liner, then the inter-layer dielectric is deposited and planarised.',
+  why: '<p>The <strong>oxynitride liner</strong> is the contact etch stop layer. The via etch that follows has to land on a 20 nm silicide film without punching through it into the junction; etching 250 nm of oxide with that precision is not possible by timing alone. Instead the oxide etch stops on the oxynitride, and a second, much shorter etch with different chemistry opens the liner. Depth control comes from material selectivity, not from the clock.</p><p>The liner also acts as a diffusion barrier against moisture and mobile ions reaching the device.</p><p><code>steps= 6</code> splits the deposition into six increments. A single thick conformal deposition over this topography produces poorly shaped elements where surfaces merge; depositing incrementally lets the level-set and mesher follow the evolving surface cleanly. It is a numerical measure, not a physical one.</p>',
+  dope: ['pwell', 'halo', 'next', 'nplus'],
+},
+
+/* ====================================================== 09 CONT ========= */
+{
+  m: 'cont', t: 'Contact lithography', lines: '396', geom: 'viaResist',
+  cmd: [{ c: 'photo mask= VIA1_p thickness= 0.5', r: '500 nm resist, openings over the source/drain' }],
+  what: 'Resist opens over the source and drain contacts.',
+  mask: { name: 'VIA1_p', pol: 'opens the contact holes', note: 'must land between the spacer and the STI edge' },
+  why: '<p>The contact has to fit in the gap between the spacer foot and the STI edge — here roughly 200 nm of landing area. Overlay error eats into that directly: too close to the gate and you short to it, too close to the STI and you etch into the trench oxide and leak to the well.</p>',
+  dope: ['pwell', 'halo', 'next', 'nplus'],
+},
+{
+  m: 'cont', t: 'Etch the via — oxide, then the liner', lines: '399–405', geom: 'viaEtchON',
+  cmd: [
+    { c: 'etch material= { Oxide } type= trapezoidal thickness= 1.65*$Metal1 angle= $VIA_tilt', r: '1.65 × 0.15 = <b>247.5 nm</b> at <b>82°</b>' },
+    { c: 'etch material= { Oxynitride } type= trapezoidal thickness= 1.65*$Metal1 angle= $VIA_tilt', r: 'second chemistry opens the etch-stop liner' },
+    { c: 'strip Photoresist' },
+  ],
+  what: 'Two selective etches open a tapered hole down to the silicide.',
+  why: '<p>The two-material sequence is the etch-stop scheme working as designed: the first etch is fast and selective to oxide and halts on the oxynitride; the second removes only the thin liner. Neither needs precise timing.</p><p><strong>82° instead of 87°</strong> — the via is noticeably more tapered than the STI trench, and for the opposite reason. Here the taper is for <i>filling</i>: a 250 nm deep hole with vertical walls cannot be filled by CVD tungsten without a seam or a void down the centre. The 35 nm of taper per side gives the deposition a fighting chance. The cost is a larger opening at the top, which constrains how closely contacts can be packed.</p>',
+  dope: ['pwell', 'halo', 'next', 'nplus'],
+},
+{
+  m: 'cont', t: 'Tungsten plug', lines: '407–413', geom: 'wFill',
+  cmd: [
+    { c: 'deposit material= { Tungsten } type= fill coord= -$Metal1-0.1+0.001', r: 'fill to x = −0.249 — 1 nm above the ILD, i.e. plug only' },
+    { c: 'refinebox name= Trench mask= VIA1_p \\\n min.normal.size= 0.001/$fp normal.growth.ratio= 2.0 \\\n interface.materials = {Oxide Tungsten Oxynitride Tungsten}', r: '1 nm elements at the plug interfaces' },
+  ],
+  what: 'The via is filled with tungsten, planarised flush with the ILD.',
+  why: '<p>The <code>+0.001</code> in the fill coordinate is doing real work: filling to exactly the ILD surface is numerically ambiguous, so the recipe overfills by 1 nm. The result is a plug with no overburden — the idealised equivalent of tungsten CVD followed by CMP.</p><p>Tungsten rather than aluminium or copper because it is the only metal that fills a high-aspect-ratio hole conformally by CVD. It is relatively resistive, which is why it is used for the short vertical plug and not for the long horizontal wiring.</p><p>The last refinement box resolves the plug interfaces — relevant only if you intend to extract contact resistance; for a plain I–V simulation it is removed in the next module along with everything else.</p>',
+  dope: ['pwell', 'halo', 'next', 'nplus'],
+},
+
+/* ======================================================= 10 DEV ========= */
+{
+  m: 'dev', t: 'Truncate and strip for device simulation', lines: '418–426', geom: 'deviceStrip',
+  cmd: [
+    { c: 'fset fd 1.0  ;  fset Xbot 0.5', r: 'separate mesh multiplier for the device; keep 0.5 µm of substrate' },
+    { c: 'transform cut min= {-10 -10 -10} max= {$Xbot 10 10}', r: 'discard everything below x = 0.5 µm' },
+    { c: 'strip Oxide\nstrip Tungsten\nstrip Aluminum\nstrip Oxynitride' },
+  ],
+  what: 'The 10 µm substrate is cut to 0.5 µm and the back-end films are removed.',
+  why: '<p>The process structure is the wrong shape for device simulation. 10 µm of substrate was needed so that deep implants and diffusion saw a semi-infinite wafer, but in a drift-diffusion solve it is thousands of wasted elements — all the action is within a few hundred nanometres of the surface. The cut keeps 0.5 µm, enough for the depletion region and the substrate contact.</p><p>The strips remove everything electrically irrelevant: ILD, plugs, liner. Note what survives — <code>strip</code> removes the <i>exposed</i> layer of a material, so the <strong>gate oxide survives</strong> because it is sealed between the poly and the silicon. Without it there would be no transistor. The spacer nitride and the silicide also remain.</p><p>The exposed STI fill is oxide and does go; the empty trench then acts as an insulating boundary, which is electrically equivalent for this simulation.</p>',
+  dope: ['pwell', 'halo', 'next', 'nplus'],
+},
+{
+  m: 'dev', t: 'Rebuild the mesh for the device solver', lines: '430–462', geom: 'deviceStrip', mesh: 'device',
+  cmd: [
+    { c: 'refinebox clear\nline clear', r: 'discard every process refinement box' },
+    { c: 'pdbSet Grid AdaptiveField Refine.Abs.Error 1e37\npdbSet Grid AdaptiveField Refine.Rel.Error 1e10', r: 'disable error-driven refinement — the boxes take over' },
+    { c: 'refinebox name= Device_Active mask= Active_p \\\n refine.fields= { NetActive } def.max.asinhdiff= 1.0 \\\n refine.max.edge= " 0.01/$fd  $PolyPitch/(20*$fd)  $IsoPitch/(16.0*$fd)" \\\n refine.min.edge= " 0.0025/$fd  $PolyPitch/(80*$fd)  $IsoPitch/(64.0*$fd)" \\\n materials= {Silicon PolySilicon} adaptive', r: 'edges 2.5–10 nm in x, refined where NetActive changes' },
+    { c: 'refinebox name= Device_IF mask= Active_p \\\n        extend= 0.005 extrusion.min= -0.01 extrusion.max= $Divot-0.002 \\\n        min.normal.size= 0.0002/$fd normal.growth.ratio= 1.2', r: 'box reaches 0.008 µm deep; first layer 0.2 nm, growing 1.2× — for the inversion channel' },
+    { c: 'grid remesh' },
+  ],
+  what: 'Every process box is cleared and replaced with a doping-adaptive device mesh.',
+  why: '<p>Process and device simulation want different meshes. Process meshing follows <i>geometry</i> — where films are deposited and etched. Device meshing follows <i>the solution</i> — where carrier concentration and potential vary.</p><p>So the boxes are cleared and rebuilt around <code>refine.fields= { NetActive }</code>: elements are placed where <strong>net active doping</strong> changes fastest, which is exactly at the junctions. <code>def.max.asinhdiff= 1.0</code> is the criterion — refine until the inverse-hyperbolic-sine of the doping changes by no more than 1 across an element, which is a decade-like measure that works sensibly across 1×10¹⁵ to 1×10²⁰ cm⁻³.</p><p>The two <code>Refine.Abs.Error</code> lines look strange — set to 1×10³⁷ to effectively switch the generic adaptive criterion <i>off</i>, so the explicit boxes have full control. A common idiom: disable the default, then state exactly what you want.</p><p><code>Device_IF</code> rebuilds the 0.2 nm interface layer, now with a gentler 1.2× growth ratio. The inversion layer is only a few nanometres thick, and if the mesh cannot resolve it the simulated drive current is simply wrong.</p>',
+  dope: ['pwell', 'halo', 'next', 'nplus'],
+},
+{
+  m: 'dev', t: 'Dope the gate and define the contacts', lines: '465–482', geom: 'deviceFinal',
+  cmd: [
+    { c: 'term name=NetActive PolySilicon delete' },
+    { c: 'select z= "1.5e20" name= NetActive store PolySilicon', r: 'NMOS: n⁺ poly at <b>1.5×10²⁰ cm⁻³</b>  (PMOS branch: −2.5×10²⁰)' },
+    { c: 'icwb.contact.mask layer.name= "GATE" name= gate box PolySilicon xlo= -$Tpoly-0.05 xhi=-$Tpoly+0.05', r: 'gate electrode on the poly top, ±50 nm window' },
+    { c: 'icwb.contact.mask layer.name= "SOURCE" name= source point CobaltSilicide x= $SilicideX replace', r: 'source electrode on the silicide at x = −1 nm' },
+    { c: 'contact bottom name= substrate Silicon', r: 'substrate electrode on the back face' },
+  ],
+  what: 'The poly is given a uniform n⁺ doping and three electrodes are attached.',
+  why: '<p>The poly gate is doped by assignment rather than by simulating its implant and diffusion. That is a deliberate simplification: 1.5×10²⁰ cm⁻³ uniform n-type sets the gate work function correctly, which is all the device simulation needs, and it avoids having to resolve dopant diffusion through grain boundaries. The PMOS branch uses −2.5×10²⁰ — negative meaning p-type — giving the p⁺ poly gate that sets the PMOS threshold.</p><p>Both electrodes are placed through the <strong>layout</strong> rather than by coordinate. <code>icwb.contact.mask</code> intersects a named layout layer with a material and a position window, so the contacts land correctly even if the geometry shifts. Contacts are the one thing that must be right or the device simulation will not converge at all.</p><p><code>x= $SilicideX</code> is −0.001, one nanometre above the original surface, which is inside the silicide after the recess and silicidation — a <code>point</code> contact needs a coordinate that genuinely falls in the target material.</p>',
+  dope: ['pwell', 'halo', 'next', 'nplus', 'polyn'],
+},
+{
+  m: 'dev', t: 'Save and mirror into the full transistor', lines: '485–491', geom: 'deviceFinal', lab: 'deviceFinal',
+  cmd: [
+    { c: 'struct tdr= n@node@_half', r: 'the simulated half-device' },
+    { c: 'if { [catch { exec tdx --mirr-tdr -Y -ren source=drain n@node@_half_fps n@node@_fps} Err] !=0 } {\n    LogFile $Err\n}', r: 'mirror about Y, rename the mirrored source to <b>drain</b>' },
+    { c: 'exit' },
+  ],
+  what: 'The half-structure is mirrored about the gate centreline to produce the complete MOSFET.',
+  mirror: true,
+  why: '<p>This is the payoff for simulating only half the device. <code>tdx --mirr-tdr -Y</code> reflects the structure about the Y boundary — the gate centreline — and <code>-ren source=drain</code> renames the reflected electrode, so the mirrored copy of the source becomes the drain. The output <code>n@node@_fps</code> is a full, symmetric, four-terminal transistor ready for Sentaurus Device.</p><p>The saving is real: half the mesh, so roughly half the memory and better than half the runtime, repeated across every split in the Workbench experiment. The cost is that the device is symmetric by construction — you cannot simulate asymmetric source/drain engineering this way, and any process step that breaks left/right symmetry (a single-rotation tilted implant, for instance) would be misrepresented. That is precisely why the halo implant used four rotations.</p><p>The <code>catch</code> wrapper is good scripting hygiene: <code>tdx</code> is an external executable, so its failure is trapped and logged rather than silently producing no output.</p>',
+  dope: ['pwell', 'halo', 'next', 'nplus', 'polyn'],
+},
+];
+
+/* add global index and module grouping */
+STEPS.forEach((s, i) => { s.i = i; });
+/* ===========================================================================
+   app.js — rendering and navigation
+   =========================================================================== */
+
+const MATS = {
+  si:     { n: 'Silicon',           f: 'var(--m-si)',     s: 'var(--m-si-s)' },
+  ox:     { n: 'SiO₂',         f: 'var(--m-ox)',     s: 'var(--m-ox-s)' },
+  nit:    { n: 'Si₃N₄',   f: 'var(--m-nit)',    s: 'var(--m-nit-s)' },
+  pr:     { n: 'Photoresist',       f: 'var(--m-pr)',     s: 'var(--m-pr-s)' },
+  poly:   { n: 'Polysilicon',       f: 'var(--m-poly)',   s: 'var(--m-poly-s)' },
+  cosi:   { n: 'CoSi₂',        f: 'var(--m-cosi)',   s: 'var(--m-cosi-s)' },
+  oxynit: { n: 'Oxynitride',        f: 'var(--m-oxynit)', s: 'var(--m-oxynit-s)' },
+  w:      { n: 'Tungsten',          f: 'var(--m-w)',      s: 'var(--m-w-s)' },
+  void:   { n: 'Etched open',       f: 'var(--stage-bg)', s: 'var(--stage-edge)' },
+};
+
+const DOPE_INFO = {
+  pwell: { n: 'p-well / Vᴛ', c: 'var(--d-p)', a: 0.08 },
+  halo:  { n: 'p halo',           c: 'var(--d-p)', a: 0.20 },
+  next:  { n: 'n⁻ extension', c: 'var(--d-n)', a: 0.17 },
+  nplus: { n: 'n⁺ S/D',      c: 'var(--d-n)', a: 0.26 },
+  polyn: { n: 'n⁺ poly',     c: 'var(--d-n)', a: 0.24 },
+};
+
+/* feature callouts: [text, y, x, anchor, leaderToY, leaderToX] */
+const LABELS = {
+  pad: [['nitride hard mask', -0.20, -0.16, 'middle', -0.20, -0.075],
+        ['pad oxide', 0.30, -0.115, 'middle', 0.22, -0.006]],
+  trench: [['87° sidewall', -0.50, 0.21, 'middle', -0.372, 0.22],
+           ['STI_depth = 0.45', -0.50, 0.40, 'middle', -0.45, 0.44]],
+  liner: [['thermal liner oxide', -0.50, 0.12, 'middle', -0.40, 0.17]],
+  cornerRound: [['rounded corner', -0.19, 0.10, 'middle', -0.335, 0.014]],
+  oxFill: [['STI oxide fill', -0.48, 0.21, 'middle', -0.46, 0.22],
+           ['2 nm over active', 0.19, -0.075, 'middle', 0.10, -0.004]],
+  divot: [['divot', -0.21, -0.09, 'middle', -0.352, 0.008],
+          ['STI recessed 9 nm', -0.49, -0.085, 'middle', -0.47, 0.004]],
+  gox: [['1.5 nm gate oxide', 0.21, -0.075, 'middle', 0.06, -0.004]],
+  polyDep: [['poly 160 nm, conformal', -0.07, -0.225, 'middle', -0.30, -0.168]],
+  polyEtch: [['resist defines Lᵢ = 0.13 µm', -0.30, -0.255, 'start', -0.066, -0.20]],
+  gateSmooth: [['rounded gate corners', 0.285, -0.215, 'middle', 0.064, -0.170],
+               ['gate oxide still on the S/D', -0.30, -0.085, 'start', -0.17, -0.005]],
+  sdRecess: [['5 nm Si recess, 45°', 0.30, 0.075, 'middle', 0.13, 0.006]],
+  reox: [['5 nm re-ox seals the gate edge', -0.30, -0.215, 'middle', -0.072, -0.11]],
+  oxSpacer: [['conformal nitride + oxide', -0.32, -0.245, 'middle', -0.135, -0.14]],
+  natOx: [['spacer: 35 nm nitride', 0.30, -0.20, 'middle', 0.088, -0.105],
+               ['+ 42 nm oxide', 0.30, -0.165, 'middle', 0.128, -0.06],
+               ['STI now 32 nm low', -0.50, -0.075, 'middle', -0.47, 0.028]],
+  cosi: [['20 nm CoSi₂ on S/D only', 0.30, 0.09, 'middle', 0.24, 0.005],
+         ['poly left unsilicided', -0.29, -0.215, 'middle', -0.02, -0.172]],
+  ildDep: [['ILD oxide', -0.47, -0.21, 'middle', -0.45, -0.20],
+           ['50 nm oxynitride etch stop', 0.30, -0.125, 'middle', 0.30, -0.165]],
+  viaEtchON: [['82° taper for filling', -0.49, -0.13, 'middle', -0.30, -0.14]],
+  wFill: [['tungsten plug', -0.50, -0.165, 'middle', -0.235, -0.15]],
+  deviceStrip: [['gate oxide survives (enclosed)', 0.31, -0.215, 'middle', 0.05, -0.006],
+                ['trench now ambient', -0.50, 0.22, 'middle', -0.46, 0.24],
+                ['cut at Xbot = 0.5 µm', -0.30, 0.52, 'start', 0, 0]],
+  deviceFinal: [['gate', 0, -0.215, 'middle', 0, -0.17],
+                ['source', -0.235, -0.085, 'middle', -0.235, 0.0],
+                ['drain', 0.235, -0.085, 'middle', 0.235, 0.0],
+                ['substrate', 0.42, 0.52, 'middle', 0, 0]],
+};
+
+const MESHBOX = {
+  vt: [{ n: 'Vt', y0: -(P.ACT + 0.015), y1: P.ACT + 0.015, x0: -0.001, x1: 0.55 }],
+  halo: [
+    { n: 'HALO', y0: -(P.ACT + 0.01), y1: P.ACT + 0.01, x0: -0.05, x1: 0.15 },
+    { n: 'YEXT', y0: -(P.GHW + 0.065), y1: -(P.GHW - 0.015), x0: -P.GOX, x1: 0.035 },
+    { n: '', y0: P.GHW - 0.015, y1: P.GHW + 0.065, x0: -P.GOX, x1: 0.035 },
+    { n: 'EXT_IF', y0: -(P.ACT + 0.005), y1: P.ACT + 0.005, x0: -0.0045, x1: 0.006 },
+  ],
+  device: [
+    { n: 'Device_Active', y0: -(P.ACT + 0.01), y1: P.ACT + 0.01, x0: -P.TPOLY, x1: 0.30 },
+    { n: 'Device_Ext', y0: -(P.GHW + 0.065), y1: -(P.GHW - 0.015), x0: -0.01, x1: 0.04 },
+    { n: '', y0: P.GHW - 0.015, y1: P.GHW + 0.065, x0: -0.01, x1: 0.04 },
+    { n: 'Device_IF', y0: -(P.ACT + 0.005), y1: P.ACT + 0.005, x0: -0.01, x1: P.DIVOT - 0.002 },
+  ],
+};
+
+const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+const $ = (id) => document.getElementById(id);
+
+const UI = { i: 0, res: true, dope: false, mesh: false };
+
+/* ------------------------------------------------------------------ SVG */
+function buildSVG(step) {
+  const shapes = STATES[step.geom]();
+  const fx0 = sx(-P.YV), fx1 = sx(P.YV), fy0 = sy(P.XTOP), fy1 = sy(P.XBOT);
+  const o = [];
+
+  o.push(`<defs>
+    <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5.5" markerHeight="5.5"
+            orient="auto-start-reverse"><path d="M0 0.8 L10 5 L0 9.2 z" style="fill:var(--accent)"/></marker>
+    <marker id="ahb" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5.5" markerHeight="5.5"
+            orient="auto-start-reverse"><path d="M0 0.8 L10 5 L0 9.2 z" style="fill:var(--warn)"/></marker>
+    <pattern id="hatch" width="7" height="7" patternTransform="rotate(45)" patternUnits="userSpaceOnUse">
+      <line x1="0" y1="0" x2="0" y2="7" stroke="currentColor" stroke-width="1" opacity="0.26"/>
+    </pattern>
+    <clipPath id="frame"><rect x="${fx0}" y="${fy0}" width="${fx1 - fx0}" height="${fy1 - fy0}"/></clipPath>
+    <clipPath id="siclip"><path d="${toPath(shapes[0].pts)}"/></clipPath>
+  </defs>`);
+
+  // ambient + frame
+  o.push(`<rect x="${fx0}" y="${fy0}" width="${fx1 - fx0}" height="${fy1 - fy0}"
+    style="fill:var(--stage-bg);stroke:var(--stage-edge)" stroke-width="1"/>`);
+
+  // materials
+  o.push(`<g clip-path="url(#frame)">`);
+  for (const sh of shapes) {
+    const m = MATS[sh.mat] || MATS.si;
+    o.push(`<path d="${toPath(sh.pts)}" style="fill:${m.f};stroke:${m.s}" stroke-width="0.9"
+      stroke-linejoin="round"/>`);
+  }
+
+  // doping overlay
+  if (UI.dope && step.dope && step.dope.length) {
+    o.push(`<g clip-path="url(#siclip)">`);
+    for (const k of step.dope) {
+      if (k === 'polyn') continue;
+      const d = DOPE_INFO[k];
+      for (const r of DOPING[k]()) {
+        o.push(`<path d="${toPath(r.pts)}" style="fill:${d.c};stroke:${d.c}" fill-opacity="${d.a}"
+          stroke-opacity="0.65" stroke-width="1" stroke-dasharray="4 3"/>`);
+      }
+    }
+    o.push(`</g>`);
+    if (step.dope.includes('polyn')) {
+      const d = DOPE_INFO.polyn;
+      for (const r of DOPING.polyn()) {
+        o.push(`<path d="${toPath(r.pts)}" style="fill:${d.c};stroke:${d.c}" fill-opacity="${d.a}"
+          stroke-opacity="0.65" stroke-width="1" stroke-dasharray="4 3"/>`);
+      }
+    }
+  }
+
+  // mesh boxes
+  if (UI.mesh && step.mesh) {
+    for (const b of MESHBOX[step.mesh]) {
+      const X = sx(Math.max(b.y0, -P.YV)), W = sx(Math.min(b.y1, P.YV)) - X;
+      const Y = sy(Math.max(b.x0, P.XTOP)), H = sy(Math.min(b.x1, P.XBOT)) - Y;
+      o.push(`<rect x="${X.toFixed(1)}" y="${Y.toFixed(1)}" width="${W.toFixed(1)}"
+        height="${Math.max(H, 2).toFixed(1)}" fill="none" style="stroke:var(--accent)"
+        stroke-width="1.3" stroke-dasharray="5 4" opacity="0.9"/>`);
+      if (b.n) o.push(`<text x="${(X + 4).toFixed(1)}" y="${(Y + 13).toFixed(1)}"
+        style="fill:var(--accent)" font-size="11" font-weight="500">${b.n}</text>`);
+    }
+  }
+
+  // implant arrows
+  if (step.implant) o.push(implantArrows(step.implant));
+
+  // probe cut
+  if (step.probe) {
+    const X = sx(step.probe.y);
+    o.push(`<line x1="${X}" y1="${fy0}" x2="${X}" y2="${fy1}" style="stroke:var(--accent)"
+      stroke-width="1.4" stroke-dasharray="7 5"/>`);
+  }
+  o.push(`</g>`);
+
+  // half-domain indicator
+  const isMirrored = !!step.mirror;
+  if (!isMirrored) {
+    o.push(`<rect x="${sx(0)}" y="${fy0}" width="${fx1 - sx(0)}" height="${fy1 - fy0}"
+      fill="url(#hatch)" opacity="0.26" clip-path="url(#frame)"/>`);
+  }
+  o.push(`<line x1="${sx(0)}" y1="${fy0 - 14}" x2="${sx(0)}" y2="${fy1}"
+    style="stroke:var(--fg-faint)" stroke-width="1.2" stroke-dasharray="6 4"/>`);
+  o.push(`<text x="${sx(0)}" y="${fy0 - 20}" text-anchor="middle" style="fill:var(--fg-faint)"
+    font-size="10.5">Ymid &mdash; mirror plane</text>`);
+  o.push(`<text x="${fx1 - 6}" y="${fy0 + 15}" text-anchor="end" style="fill:var(--fg-faint)"
+    font-size="10.5">${isMirrored
+      ? 'mirrored — full device' : 'not simulated — added by the final mirror'}</text>`);
+  if (!isMirrored) {
+    o.push(`<text x="${fx0 + 6}" y="${fy0 + 15}" style="fill:var(--fg-faint)"
+      font-size="10.5">simulated domain</text>`);
+  }
+
+  // callouts: only on the step that introduces a given geometry
+  const key = step.lab || (STEPS.findIndex((z) => z.geom === step.geom) === step.i ? step.geom : null);
+  const labs = (key && LABELS[key]) || [];
+  for (const L of labs) o.push(callout(L));
+
+  // axes
+  o.push(axes());
+
+  return o.join('\n');
+}
+
+function callout([text, ly, lx, anchor, ty, tx]) {
+  const X = sx(ly), Y = sy(lx);
+  const hasLeader = !(ty === 0 && tx === 0);
+  let s = '';
+  if (hasLeader) {
+    s += `<line x1="${X}" y1="${Y + 3}" x2="${sx(ty)}" y2="${sy(tx)}" style="stroke:var(--fg-faint)"
+      stroke-width="0.9" opacity="0.8"/>`;
+    s += `<circle cx="${sx(ty)}" cy="${sy(tx)}" r="2" style="fill:var(--fg-faint)"/>`;
+  }
+  const w = text.length * 5.6 + 10;
+  s += `<rect x="${(anchor === 'start' ? X - 4 : X - w / 2).toFixed(1)}" y="${(Y - 11).toFixed(1)}"
+    width="${w.toFixed(1)}" height="15" rx="3" style="fill:var(--stage-bg);stroke:var(--stage-edge)"
+    stroke-width="0.8" opacity="0.94"/>`;
+  s += `<text x="${X}" y="${Y}" text-anchor="${anchor}" style="fill:var(--fg-dim)"
+    font-size="10.5">${text}</text>`;
+  return s;
+}
+
+function implantArrows(im) {
+  const n = 9, out = [];
+  const tilt = (im.tilt || 0) * Math.PI / 180;
+  const top = sy(P.XTOP) + 26;
+  const endX = im.blocked ? sy(-0.235) : sy(-0.012);
+  const L = endX - top;
+  const dx = Math.tan(tilt) * L;
+  const col = im.blocked ? 'var(--warn)' : 'var(--accent)';
+  const mk = im.blocked ? 'url(#ahb)' : 'url(#ah)';
+  for (let k = 0; k < n; k++) {
+    const X = sx(-P.YV + 0.06 + (k / (n - 1)) * (2 * P.YV - 0.12));
+    out.push(`<line x1="${(X - dx).toFixed(1)}" y1="${top}" x2="${X.toFixed(1)}" y2="${endX.toFixed(1)}"
+      style="stroke:${col}" stroke-width="1.5" marker-end="${mk}" opacity="0.95"/>`);
+    if (im.rot) {
+      out.push(`<line x1="${(X + dx).toFixed(1)}" y1="${top}" x2="${X.toFixed(1)}" y2="${endX.toFixed(1)}"
+        style="stroke:${col}" stroke-width="1.5" marker-end="${mk}"
+        opacity="0.5" stroke-dasharray="4 3"/>`);
+    }
+  }
+  if (im.blocked) {
+    out.push(`<line x1="${sx(-P.YV)}" y1="${(endX + 5).toFixed(1)}" x2="${sx(P.YV)}" y2="${(endX + 5).toFixed(1)}"
+      style="stroke:var(--warn)" stroke-width="2"/>`);
+    out.push(`<text x="${sx(0)}" y="${(endX + 22).toFixed(1)}" text-anchor="middle" style="fill:var(--warn)"
+      font-size="11" font-weight="500">absorbed in photoresist — nothing reaches the silicon</text>`);
+  }
+  return out.join('\n');
+}
+
+function axes() {
+  const o = [];
+  const fx0 = sx(-P.YV), fy1 = sy(P.XBOT);
+  for (let d = 0; d <= 0.5001; d += 0.1) {
+    const Y = sy(d);
+    o.push(`<line x1="${fx0 - 5}" y1="${Y}" x2="${fx0}" y2="${Y}" style="stroke:var(--fg-faint)" stroke-width="1"/>`);
+    o.push(`<text x="${fx0 - 8}" y="${Y + 3.5}" text-anchor="end" style="fill:var(--fg-faint)"
+      font-size="10">${d.toFixed(1)}</text>`);
+  }
+  o.push(`<text x="${fx0 - 8}" y="${sy(-0.02)}" text-anchor="end" style="fill:var(--fg-faint)"
+    font-size="9.5">x /µm</text>`);
+  // lateral scale bar: 0.2 um
+  const bx = sx(-P.YV) + 10, by = fy1 + 24, bw = 0.2 * SC;
+  o.push(`<line x1="${bx}" y1="${by}" x2="${bx + bw}" y2="${by}" style="stroke:var(--fg-dim)" stroke-width="1.6"/>`);
+  o.push(`<line x1="${bx}" y1="${by - 4}" x2="${bx}" y2="${by + 4}" style="stroke:var(--fg-dim)" stroke-width="1.6"/>`);
+  o.push(`<line x1="${bx + bw}" y1="${by - 4}" x2="${bx + bw}" y2="${by + 4}" style="stroke:var(--fg-dim)" stroke-width="1.6"/>`);
+  o.push(`<text x="${bx + bw / 2}" y="${by + 17}" text-anchor="middle" style="fill:var(--fg-dim)"
+    font-size="10.5">0.2 µm</text>`);
+  return o.join('\n');
+}
+
+/* ---------------------------------------------------------- thermal plot */
+function rampSVG(key, label) {
+  const pts = RAMPS[key];
+  const W = 372, H = 118, L = 42, R = 10, T = 14, B = 26;
+  const tMax = pts[pts.length - 1][0] || 1;
+  const temps = pts.map((p) => p[1]);
+  const tMin = Math.min(...temps) - 60, tHi = Math.max(...temps) + 60;
+  const X = (t) => L + (t / tMax) * (W - L - R);
+  const Y = (v) => T + (1 - (v - tMin) / (tHi - tMin)) * (H - T - B);
+  const line = pts.map((p, i) => (i ? 'L' : 'M') + X(p[0]).toFixed(1) + ' ' + Y(p[1]).toFixed(1)).join(' ');
+  const area = line + ` L${X(tMax).toFixed(1)} ${Y(tMin).toFixed(1)} L${X(0).toFixed(1)} ${Y(tMin).toFixed(1)} Z`;
+  const peak = Math.max(...temps);
+  const unit = tMax < 1.2 ? 's' : 'min';
+  const tf = (v) => (unit === 's' ? (v * 60).toFixed(v * 60 < 10 ? 1 : 0) : v.toFixed(tMax < 5 ? 2 : 0));
+  const o = [];
+  for (const v of [Math.round(tMin / 100) * 100 + 100, peak]) {
+    o.push(`<line x1="${L}" y1="${Y(v)}" x2="${W - R}" y2="${Y(v)}" style="stroke:var(--line)"
+      stroke-width="1" stroke-dasharray="3 3"/>`);
+    o.push(`<text x="${L - 6}" y="${Y(v) + 3.5}" text-anchor="end" style="fill:var(--fg-faint)"
+      font-size="9.5">${v}</text>`);
+  }
+  o.push(`<path d="${area}" style="fill:var(--accent)" opacity="0.14"/>`);
+  o.push(`<path d="${line}" fill="none" style="stroke:var(--accent)" stroke-width="2"
+    stroke-linejoin="round" stroke-linecap="round"/>`);
+  for (const p of pts) o.push(`<circle cx="${X(p[0]).toFixed(1)}" cy="${Y(p[1]).toFixed(1)}" r="2.6"
+    style="fill:var(--accent)"/>`);
+  o.push(`<line x1="${L}" y1="${Y(tMin)}" x2="${W - R}" y2="${Y(tMin)}" style="stroke:var(--line)" stroke-width="1"/>`);
+  o.push(`<text x="${L}" y="${H - 8}" style="fill:var(--fg-faint)" font-size="9.5">0</text>`);
+  o.push(`<text x="${W - R}" y="${H - 8}" text-anchor="end" style="fill:var(--fg-faint)"
+    font-size="9.5">${tf(tMax)} ${unit}</text>`);
+  o.push(`<text x="${L - 6}" y="${T + 4}" text-anchor="end" style="fill:var(--fg-faint)"
+    font-size="9">°C</text>`);
+  return `<svg class="ramp" viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(label)}">${o.join('')}</svg>`;
+}
+
+/* -------------------------------------------------------------- rendering */
+function renderRail() {
+  const counts = {};
+  MODULES.forEach((m) => { counts[m.id] = STEPS.filter((s) => s.m === m.id).length; });
+  const cur = STEPS[UI.i].m;
+  const html = ['<div class="hd">Process modules</div>'];
+  for (const m of MODULES) {
+    const list = STEPS.filter((s) => s.m === m.id);
+    const done = list.filter((s) => s.i < UI.i).length;
+    const pct = m.id === cur
+      ? ((STEPS[UI.i].i - list[0].i + 1) / list.length) * 100
+      : (UI.i > list[list.length - 1].i ? 100 : 0);
+    html.push(`<button class="mod" data-mod="${m.id}" aria-current="${m.id === cur}">
+      <span class="num">${m.n}</span>
+      <span><span class="nm">${m.name}</span><span class="ds">${m.sub}</span></span>
+      <span class="bar"><i style="width:${pct.toFixed(0)}%"></i></span>
+    </button>`);
+  }
+  $('rail').innerHTML = html.join('');
+  $('rail').querySelectorAll('[data-mod]').forEach((b) => {
+    b.onclick = () => { go(STEPS.findIndex((s) => s.m === b.dataset.mod)); };
+  });
+  const act = $('rail').querySelector('[aria-current="true"]');
+  if (act && window.innerWidth <= 760) act.scrollIntoView({ block: 'nearest', inline: 'center' });
+}
+
+function renderLegend(step) {
+  const shapes = STATES[step.geom]();
+  const seen = [];
+  for (const s of shapes) if (!seen.includes(s.mat)) seen.push(s.mat);
+  const out = seen.filter((k) => MATS[k]).map((k) => {
+    const m = MATS[k];
+    return `<span class="lg"><span class="sw" style="background:${m.f};border-color:${m.s}"></span>${m.n}</span>`;
+  });
+  if (UI.dope && step.dope) {
+    for (const k of step.dope) {
+      const d = DOPE_INFO[k];
+      out.push(`<span class="lg"><span class="sw" style="background:${d.c};opacity:${0.25 + d.a};
+        border-color:${d.c}"></span>${d.n}</span>`);
+    }
+  }
+  $('legend').innerHTML = out.join('');
+}
+
+function renderCmds(step) {
+  const out = [];
+  for (const c of step.cmd) {
+    out.push('<div class="cmdgrp">');
+    out.push(`<pre class="cmd">${esc(c.c)}</pre>`);
+    if (c.r && UI.res) out.push(`<div class="res"><span class="ar">→</span><span>${c.r}</span></div>`);
+    out.push('</div>');
+  }
+  $('cmds').innerHTML = out.join('');
+}
+
+function renderExtras(step) {
+  const out = [];
+  if (step.mask) {
+    out.push(`<div class="card"><span class="t">Mask layer</span>
+      <span class="v">${esc(step.mask.name)}</span>
+      <span class="n">${step.mask.pol}. ${step.mask.note}.</span></div>`);
+  }
+  if (step.implant) {
+    const im = step.implant;
+    out.push(`<div class="card${im.blocked ? ' block' : ''}">
+      <span class="t">Implant${im.n > 1 ? ' × ' + im.n : ''}${im.blocked ? ' — blocked here' : ''}</span>
+      <span class="v">${esc(im.sp)}</span>
+      <dl class="kv">
+        <dt>dose</dt><dd>${im.dose} cm⁻²</dd>
+        <dt>energy</dt><dd>${im.energy}</dd>
+        <dt>tilt</dt><dd>${im.tilt}°${im.rot ? ', 4 rotations' : ''}</dd>
+      </dl></div>`);
+  }
+  if (step.anneal) {
+    out.push(`<div class="panel"><div class="hd">Thermal cycle</div>
+      ${rampSVG(step.anneal.ramp, step.anneal.label)}
+      <div class="res"><span class="ar">→</span><span>${step.anneal.label}</span></div></div>`);
+  }
+  if (step.probe) {
+    out.push(`<div class="card"><span class="t">1-D profile cut</span>
+      <span class="v" style="font-size:12.5px">${step.probe.label}</span>
+      <span class="n">Shown as the dashed vertical line on the cross-section.</span></div>`);
+  }
+  $('extras').innerHTML = out.join('');
+}
+
+function caption(step) {
+  const m = MODULES.find((x) => x.m === step.m) || MODULES.find((x) => x.id === step.m);
+  return `Wafer cross-section after &ldquo;${esc(step.t)}&rdquo; (${m.name}, lines ${step.lines}).
+    Left of the dashed line is the simulated domain; the hatched right half exists only after the
+    final mirror. Depth axis in &micro;m from the original silicon surface.`;
+}
+
+function render() {
+  const step = STEPS[UI.i];
+  const mod = MODULES.find((m) => m.id === step.m);
+  $('kicker').textContent = mod.n + ' · ' + mod.name;
+  $('title').textContent = step.t;
+  $('lines').textContent = 'lines ' + step.lines;
+  $('what').textContent = step.what;
+  $('xsec').innerHTML = buildSVG(step);
+  $('xsec').setAttribute('aria-label', step.t + ' — wafer cross-section');
+  $('cap').innerHTML = caption(step);
+  $('why').innerHTML = step.why;
+  renderCmds(step);
+  renderExtras(step);
+  renderLegend(step);
+  renderRail();
+  $('count').textContent = `step ${UI.i + 1} / ${STEPS.length}`;
+  $('track').style.width = (((UI.i + 1) / STEPS.length) * 100).toFixed(2) + '%';
+  $('prev').disabled = UI.i === 0;
+  $('next').disabled = UI.i === STEPS.length - 1;
+  $('next').textContent = UI.i === STEPS.length - 1 ? 'End of flow' : 'Next step  →';
+  try { localStorage.setItem('cmos130.step', String(UI.i)); } catch (e) { /* ignore */ }
+}
+
+function go(i) {
+  UI.i = Math.max(0, Math.min(STEPS.length - 1, i));
+  render();
+  if (window.innerWidth > 760) $('detail-anchor')?.scrollIntoView();
+}
+
+/* ------------------------------------------------------------------ init */
+$('prev').onclick = () => go(UI.i - 1);
+$('next').onclick = () => go(UI.i + 1);
+
+function toggle(id, key) {
+  const b = $(id);
+  b.setAttribute('aria-pressed', String(UI[key]));
+  b.onclick = () => {
+    UI[key] = !UI[key];
+    b.setAttribute('aria-pressed', String(UI[key]));
+    try { localStorage.setItem('cmos130.' + key, UI[key] ? '1' : '0'); } catch (e) { /* ignore */ }
+    render();
+  };
+}
+
+try {
+  const s = localStorage.getItem('cmos130.step');
+  if (s !== null && !isNaN(+s)) UI.i = Math.max(0, Math.min(STEPS.length - 1, +s));
+  if (localStorage.getItem('cmos130.dope') === '1') UI.dope = true;
+  if (localStorage.getItem('cmos130.mesh') === '1') UI.mesh = true;
+  if (localStorage.getItem('cmos130.res') === '0') UI.res = false;
+} catch (e) { /* ignore */ }
+
+toggle('t-res', 'res');
+toggle('t-dope', 'dope');
+toggle('t-mesh', 'mesh');
+
+document.addEventListener('keydown', (e) => {
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+  if (e.key === 'ArrowRight' || e.key === 'PageDown') { e.preventDefault(); go(UI.i + 1); }
+  else if (e.key === 'ArrowLeft' || e.key === 'PageUp') { e.preventDefault(); go(UI.i - 1); }
+  else if (e.key === 'Home') { e.preventDefault(); go(0); }
+  else if (e.key === 'End') { e.preventDefault(); go(STEPS.length - 1); }
+});
+
+render();
+</script>
+
+</body></html>
